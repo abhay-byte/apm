@@ -12,10 +12,244 @@ filters:
   - Apache-2.0
   - MIT
   - BSD-3-Clause
+
 repositories:
-- enabled: true
-  name: F-Droid
-  url: https://f-droid.org/repo
-- enabled: true
-  name: IzzyOnDroid
-  url: https://apt.izzysoft.de/fdroid/repo
+  - name: "F-Droid"
+    url: "https://f-droid.org/repo"
+    enabled: true
+    priority: 1
+    description: "Official F-Droid repository"
+    fingerprint: "43238D512C1E5EB2D6569F4A3AFBF5523418B82E0A3ED1552770ABB9A9C9CCAB"
+    
+  - name: "F-Droid Archive"
+    url: "https://f-droid.org/archive"
+    enabled: false
+    priority: 2
+    description: "Archive of older F-Droid apps"
+    fingerprint: "43238D512C1E5EB2D6569F4A3AFBF5523418B82E0A3ED1552770ABB9A9C9CCAB"
+    
+  - name: "IzzyOnDroid"
+    url: "https://apt.izzysoft.de/fdroid/repo"
+    enabled: true
+    priority: 3
+    description: "Third-party F-Droid compatible repository"
+    fingerprint: "3BF0D6ABFEAE2F401707B6D966BE743BF0EEE49C2561B9BA39073711F628937A"
+    
+  - name: "Guardian Project"
+    url: "https://guardianproject.info/fdroid/repo"
+    enabled: true
+    priority: 4
+    description: "Privacy and security focused apps"
+    fingerprint: "B7C2EEFD8DAC7806AF67DFCD92EB18126BC08312A7F2D6F3862E46013C7A6135"
+    
+  - name: "Guardian Project Archive"
+    url: "https://guardianproject.info/fdroid/archive"
+    enabled: false
+    priority: 5
+    description: "Archive of Guardian Project apps"
+    fingerprint: "B7C2EEFD8DAC7806AF67DFCD92EB18126BC08312A7F2D6F3862E46013C7A6135"
+    
+  - name: "microG"
+    url: "https://microg.org/fdroid/repo"
+    enabled: true
+    priority: 6
+    description: "microG Project repository"
+    fingerprint: "9BD06727E62796C0130EB6DAB39B73157451582CBD138E86C468ACC395D14165"
+    
+  - name: "Bromite"
+    url: "https://fdroid.bromite.org/fdroid/repo"
+    enabled: true
+    priority: 7
+    description: "Bromite browser repository"
+    fingerprint: "E1EE5CD076D7B0DC84CB2B45FB78B86DF2EB39A3B6C56BA3DC292A5E0C3B9504"
+    
+  - name: "Calyx OS"
+    url: "https://calyxos.gitlab.io/calyx-fdroid-repo/fdroid/repo"
+    enabled: true
+    priority: 8
+    description: "Calyx OS repository"
+    fingerprint: "C44D58B4547DE5096138CB0B34A1CC99DAB3B4274412ED753FCCBFC11DC1B7B6"
+    
+  - name: "Collabora"
+    url: "https://www.collaboraoffice.com/downloads/fdroid/repo"
+    enabled: true
+    priority: 9
+    description: "Collabora Office repository"
+    fingerprint: "573258C84E149B5F4D9299E7434B2B69A8410372921D4AE586BA91EC767892CC"
+    
+  - name: "Bitwarden"
+    url: "https://mobileapp.bitwarden.com/fdroid/repo"
+    enabled: true
+    priority: 10
+    description: "Bitwarden password manager"
+    fingerprint: "BC54EA6FD1CD5175EFEFC148BD4B2F284B18549B4EE7A12F7B9A2B1C5B0F9F6A"
+    
+  - name: "Kali NetHunter"
+    url: "https://store.nethunter.com/fdroid/repo"
+    enabled: false
+    priority: 11
+    description: "Kali NetHunter penetration testing tools"
+    fingerprint: "7E418D34C3AD4F3C37D7E6B0FACE13332364459C862134EB099A3BDA2CCF4494"
+    
+  - name: "NewPipe"
+    url: "https://archive.newpipe.net/fdroid/repo"
+    enabled: true
+    priority: 12
+    description: "NewPipe YouTube client"
+    fingerprint: "E2402C78F9B97C6C89E97DB914A2751FDA1D02FE2039CC0897A462BDB57E5B26"
+    
+  - name: "Fedilab"
+    url: "https://fdroid.fedilab.app/repo"
+    enabled: true
+    priority: 13
+    description: "Fedilab Mastodon client"
+    fingerprint: "11F0A69910A4280E2CD3CCC3146337D006BE539B18E1A9FEACE15FF757A94FEB"
+    
+  - name: "Session"
+    url: "https://fdroid.getsession.org/fdroid/repo"
+    enabled: true
+    priority: 14
+    description: "Session messenger repository"
+    fingerprint: "DB0E5A6E6806A7A7F4E6B9C1BF9C8E4D6E8B9C3F2A7F4A3B9F9C8E4D6E8B9C3F"
+    
+  - name: "Molly"
+    url: "https://molly.im/fdroid/repo"
+    enabled: true
+    priority: 15
+    description: "Molly Signal fork"
+    fingerprint: "5198DAEF37FC23C14F5087E207A778E2DE99CA98D1FB651E982F8FDD1A0B6A7C"
+    
+  - name: "Threema"
+    url: "https://releases.threema.ch/fdroid/repo"
+    enabled: true
+    priority: 16
+    description: "Threema messenger repository"
+    fingerprint: "5734E753899B25775D90FE85362A49866E05AC4F83C05BEF5A92880D2910639E"
+    
+  - name: "GrapheneOS"
+    url: "https://seamlessupdate.app/fdroid/repo"
+    enabled: true
+    priority: 17
+    description: "GrapheneOS apps repository"
+    fingerprint: "A78B62654F1DE0288E6A6A8FDD14F2E8A3E103B3C7A4D5E5F2D78B6558B9D38C"
+    
+  - name: "DivestOS"
+    url: "https://divestos.org/fdroid/official"
+    enabled: true
+    priority: 18
+    description: "DivestOS official repository"
+    fingerprint: "E4BE8D6ABDD9E2CB6DAD3F9B2A5F0A3A8B1B9C4D6E8B9C3F2A7F4A3B9F9C8E4D"
+    
+  - name: "Briar"
+    url: "https://briarproject.org/fdroid/repo"
+    enabled: true
+    priority: 19
+    description: "Briar messenger repository"
+    fingerprint: "1FB5FCB68E1B1E1F7B6B9C8E4D6E8B9C3F2A7F4A3B9F9C8E4D6E8B9C3F2A7F4A"
+    
+  - name: "Funkwhale"
+    url: "https://fdroid.funkwhale.audio/fdroid/repo"
+    enabled: true
+    priority: 20
+    description: "Funkwhale music streaming"
+    fingerprint: "2C1A0D7B8E9C4F3D6A5B9E8C7F4A3B9F9C8E4D6E8B9C3F2A7F4A3B9F9C8E4D6E"
+
+# Package filtering for FOSS apps only
+filters:
+  approved_licenses:
+    - "GPL-3.0"
+    - "GPL-2.0"
+    - "AGPL-3.0"
+    - "Apache-2.0"
+    - "MIT"
+    - "BSD-2-Clause"
+    - "BSD-3-Clause"
+    - "ISC"
+    - "LGPL-3.0"
+    - "LGPL-2.1"
+    - "MPL-2.0"
+    - "CC0-1.0"
+    - "Unlicense"
+    - "WTFPL"
+    - "CC-BY-SA-4.0"
+    - "CC-BY-4.0"
+    - "EPL-2.0"
+    - "EUPL-1.2"
+    - "SSPL-1.0"
+    
+  approved_categories:
+    - "System"
+    - "Development"
+    - "Internet"
+    - "Security"
+    - "Graphics"
+    - "Multimedia"
+    - "Office"
+    - "Games"
+    - "Science & Education"
+    - "Money"
+    - "Sports & Health"
+    - "Navigation"
+    - "Phone & SMS"
+    - "Reading"
+    - "Time"
+    - "Writing"
+    - "Connectivity"
+    - "Theming"
+    
+  blocked_anti_features:
+    - "Ads"
+    - "Tracking"
+    - "NonFreeNet"
+    - "NonFreeAdd"
+    - "NonFreeDep"
+    - "UpstreamNonFree"
+    - "NonFreeAssets"
+    - "KnownVuln"
+    - "NoSourceSince"
+    - "ApplicationDebuggable"
+
+# Installation settings
+installation:
+  auto_update: true
+  batch_size: 10
+  timeout: 300
+  retry_count: 3
+  verify_signatures: true
+  prefer_foss: true
+  enable_reproducible_builds: true
+
+# Paths
+paths:
+  cache_dir: "~/.cache/foss-pm"
+  download_dir: "~/.cache/foss-pm/apks"
+  log_dir: "~/.cache/foss-pm/logs"
+  config_dir: "~/.config/foss-pm"
+  repo_cache_dir: "~/.cache/foss-pm/repos"
+
+# Logging
+logging:
+  level: "INFO"
+  file: "foss-pm.log"
+  max_size: "10MB"
+  backup_count: 5
+  log_installs: true
+  log_searches: true
+  log_updates: true
+
+# Update settings
+updates:
+  check_interval: "daily"
+  auto_update_repos: true
+  auto_update_apps: false
+  notify_updates: true
+  update_check_on_startup: true
+
+# Security settings
+security:
+  verify_apk_signatures: true
+  check_known_vulnerabilities: true
+  warn_tracking_apps: true
+  block_proprietary_deps: true
+  require_reproducible_builds: false
+  enable_transparency_logs: true
