@@ -1,0 +1,42 @@
+name: Update F-Droid Repository
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
+
+jobs:
+  update-repo:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install fdroidserver fdroid-dl pyyaml requests
+    
+    - name: Configure Git
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+    
+    - name: Update repository
+      run: |
+        fdroid-dl update
+        fdroid update
+    
+    - name: Generate package list
+      run: |
+        python scripts/generate_package_list.py
+    
+    - name: Commit and push changes
+      run: |
+        git add .
+        git commit -m "Automated repository update" || exit 0
+        git push

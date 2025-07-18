@@ -1,0 +1,19 @@
+{
+  "repositories": [
+    {
+      "name": "F-Droid",
+      "url": "https://f-droid.org/repo",
+      "verify": true
+    },
+    {
+      "name": "IzzyOnDroid",
+      "url": "https://apt.izzysoft.de/fdroid/repo",
+      "verify": true
+    }
+  ],
+  "filters": {
+    "license": ["GPL-3.0", "Apache-2.0", "MIT", "BSD-3-Clause"],
+    "categories": ["System", "Development", "Internet", "Security"]
+  }
+}
+

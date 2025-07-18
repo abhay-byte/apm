@@ -1,0 +1,21 @@
+auto_update: true
+cache_dir: ~/.cache/foss-pm
+download_dir: ~/.cache/foss-pm/apks
+filters:
+  categories:
+  - System
+  - Development
+  - Internet
+  - Security
+  license_whitelist:
+  - GPL-3.0
+  - Apache-2.0
+  - MIT
+  - BSD-3-Clause
+repositories:
+- enabled: true
+  name: F-Droid
+  url: https://f-droid.org/repo
+- enabled: true
+  name: IzzyOnDroid
+  url: https://apt.izzysoft.de/fdroid/repo

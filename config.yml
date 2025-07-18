@@ -1,0 +1,70 @@
+# see https://gitlab.com/fdroid/fdroidserver/blob/2.4.2/examples/config.yml
+sdk_path: $ANDROID_HOME
+keystore: keystore.p12
+keystorepass: uUYa+XInBDASDqHbZ7NyUbEBna1inHFpO7tx6Q1QO9E=
+keypass: uUYa+XInBDASDqHbZ7NyUbEBna1inHFpO7tx6Q1QO9E=
+repo_keyalias: abhaypc
+keydname: CN=abhaypc, OU=F-Droid
+
+# FOSS Package Manager Configuration
+
+repositories:
+  - name: "F-Droid"
+    url: "https://f-droid.org/repo"
+    enabled: true
+    priority: 1
+    
+  - name: "IzzyOnDroid"
+    url: "https://apt.izzysoft.de/fdroid/repo"
+    enabled: true
+    priority: 2
+    
+  - name: "Guardian Project"
+    url: "https://guardianproject.info/fdroid/repo"
+    enabled: false
+    priority: 3
+
+# Package filtering
+filters:
+  approved_licenses:
+    - "GPL-3.0"
+    - "Apache-2.0"
+    - "MIT"
+    - "BSD-3-Clause"
+    - "ISC"
+    
+  approved_categories:
+    - "System"
+    - "Development"
+    - "Internet"
+    - "Security"
+    - "Graphics"
+    - "Multimedia"
+    
+  blocked_anti_features:
+    - "Ads"
+    - "Tracking"
+    - "NonFreeNet"
+    - "NonFreeAdd"
+
+# Installation settings
+installation:
+  auto_update: true
+  batch_size: 10
+  timeout: 300
+  retry_count: 3
+  verify_signatures: true
+
+# Paths
+paths:
+  cache_dir: "~/.cache/foss-pm"
+  download_dir: "~/.cache/foss-pm/apks"
+  log_dir: "~/.cache/foss-pm/logs"
+  config_dir: "~/.config/foss-pm"
+
+# Logging
+logging:
+  level: "INFO"
+  file: "foss-pm.log"
+  max_size: "10MB"
+  backup_count: 5

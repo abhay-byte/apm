@@ -1,0 +1,35 @@
+# Package Curation Configuration
+
+approved_licenses:
+  - "GPL-3.0"
+  - "GPL-2.0"
+  - "Apache-2.0"
+  - "MIT"
+  - "BSD-3-Clause"
+  - "ISC"
+  - "LGPL-3.0"
+  - "LGPL-2.1"
+
+approved_categories:
+  - "System"
+  - "Development"
+  - "Internet"
+  - "Security"
+  - "Graphics"
+  - "Multimedia"
+  - "Office"
+  - "Games"
+  - "Science & Education"
+
+blocked_anti_features:
+  - "Ads"
+  - "Tracking"
+  - "NonFreeNet"
+  - "NonFreeAdd"
+  - "NonFreeDep"
+  - "UpstreamNonFree"
+
+# Minimum requirements
+min_added_timestamp: 1577836800  # 2020-01-01
+min_target_sdk: 26
+max_age_days: 1095  # 3 years
