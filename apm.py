@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FOSS Package Manager - Command-line package manager for Android FOSS apps
+APM (Android Package Manager) - Command-line package manager for Android FOSS apps
 """
 
 import os
@@ -12,10 +12,10 @@ from pathlib import Path
 import yaml
 import requests
 
-class FOSSPackageManager:
+class AndroidPackageManager:
     def __init__(self, config_path="config.yaml"):
         self.config = self.load_config(config_path)
-        self.mappings = self.load_mappings()  # Initialize mappings
+        self.mappings = self.load_mappings()
         self.repo_cache = {}
         self.adb_path = self.find_adb()
     
@@ -24,7 +24,7 @@ class FOSSPackageManager:
         # Check different config locations
         config_locations = [
             path,
-            os.path.expanduser("~/.config/foss-pm/config.yaml"),
+            os.path.expanduser("~/.config/apm/config.yaml"),
             "./config.yaml"
         ]
         
@@ -38,7 +38,7 @@ class FOSSPackageManager:
                     continue
         
         # Create default config if none found
-        default_path = os.path.expanduser("~/.config/foss-pm/config.yaml")
+        default_path = os.path.expanduser("~/.config/apm/config.yaml")
         return self.create_default_config(default_path)
     
     def create_default_config(self, path):
@@ -56,8 +56,8 @@ class FOSSPackageManager:
                     'enabled': True
                 }
             ],
-            'cache_dir': '~/.cache/foss-pm',
-            'download_dir': '~/.cache/foss-pm/apks',
+            'cache_dir': '~/.cache/apm',
+            'download_dir': '~/.cache/apm/apks',
             'auto_update': True,
             'filters': {
                 'license_whitelist': ['GPL-3.0', 'Apache-2.0', 'MIT', 'BSD-3-Clause'],
@@ -73,22 +73,32 @@ class FOSSPackageManager:
     
     def load_mappings(self):
         """Load package name mappings"""
-        mappings_path = os.path.expanduser("~/.config/foss-pm/package_mappings.yaml")
+        mappings_path = os.path.expanduser("~/.config/apm/package_mappings.yaml")
         
         if os.path.exists(mappings_path):
             try:
                 with open(mappings_path, 'r') as f:
                     raw_mappings = yaml.safe_load(f)
                 
+                if not raw_mappings:
+                    click.echo("Warning: Package mappings file is empty")
+                    return self.create_default_mappings(mappings_path)
+                
                 # Flatten nested mappings
                 flat_mappings = {}
                 for category, packages in raw_mappings.items():
                     if isinstance(packages, dict):
-                        flat_mappings.update(packages)
-                    else:
+                        for pkg_name, pkg_info in packages.items():
+                            if isinstance(pkg_name, str):  # Only process string keys
+                                flat_mappings[pkg_name] = pkg_info
+                    elif isinstance(category, str):
                         flat_mappings[category] = packages
                 
                 return flat_mappings
+                
+            except yaml.YAMLError as e:
+                click.echo(f"Error parsing YAML in mappings file: {e}")
+                return {}
             except Exception as e:
                 click.echo(f"Error loading mappings: {e}")
                 return {}
@@ -101,20 +111,8 @@ class FOSSPackageManager:
             "browsers": {
                 "firefox": "org.mozilla.fennec_fdroid",
                 "firefox-focus": "org.mozilla.focus",
-                "brave": "com.brave.browser",
-                "chromium": "org.chromium.chrome",
-                "tor-browser": "org.torproject.torbrowser_alpha"
-            },
-            "development": {
-                "termux": "com.termux",
-                "git": "com.github.git",
-                "code-editor": "com.github.android.codeeditor",
-                "terminal": "jackpal.androidterm"
-            },
-            "media": {
-                "vlc": "org.videolan.vlc",
-                "newpipe": "org.schabi.newpipe",
-                "kodi": "org.xbmc.kodi"
+                "tor-browser": "org.torproject.torbrowser_alpha",
+                "privacy-browser": "com.stoutner.privacybrowser.standard"
             },
             "communication": {
                 "signal": "org.thoughtcrime.securesms",
@@ -122,10 +120,19 @@ class FOSSPackageManager:
                 "element": "im.vector.app",
                 "briar": "org.briarproject.briar.android"
             },
+            "media": {
+                "vlc": "org.videolan.vlc",
+                "newpipe": "org.schabi.newpipe",
+                "antennapod": "de.danoeh.antennapod"
+            },
+            "development": {
+                "termux": "com.termux",
+                "markor": "net.gsantner.markor",
+                "octodroid": "com.gh4a"
+            },
             "security": {
                 "orbot": "org.torproject.android",
                 "keepass": "com.kunzisoft.keepass.libre",
-                "bitwarden": "com.x8bit.bitwarden",
                 "aegis": "com.beemdevelopment.aegis"
             }
         }
@@ -148,23 +155,56 @@ class FOSSPackageManager:
         if '.' in package_name:
             return package_name
         
-        # Check mappings
+        # Handle case where mappings might be None or empty
+        if not self.mappings:
+            click.echo(f"No package mappings available")
+            return package_name
+        
+        # Check direct mappings first
         if package_name in self.mappings:
             resolved = self.mappings[package_name]
-            click.echo(f"Resolved '{package_name}' -> '{resolved}'")
-            return resolved
+            # Handle case where mapping value is a dict with metadata
+            if isinstance(resolved, dict):
+                package_id = resolved.get('package_id', resolved.get('id', ''))
+                if package_id:
+                    click.echo(f"Resolved '{package_name}' -> '{package_id}'")
+                    return package_id
+            else:
+                click.echo(f"Resolved '{package_name}' -> '{resolved}'")
+                return resolved
         
-        # Check for partial matches
-        matches = [name for name in self.mappings.keys() if package_name.lower() in name.lower()]
+        # Check for partial matches - only check string keys
+        matches = []
+        for name in self.mappings.keys():
+            if isinstance(name, str) and isinstance(package_name, str):
+                if package_name.lower() in name.lower():
+                    matches.append(name)
         
         if len(matches) == 1:
-            resolved = self.mappings[matches[0]]
-            click.echo(f"Resolved '{package_name}' -> '{matches[0]}' -> '{resolved}'")
-            return resolved
+            resolved_name = matches[0]
+            resolved_value = self.mappings[resolved_name]
+            
+            # Handle dict values
+            if isinstance(resolved_value, dict):
+                package_id = resolved_value.get('package_id', resolved_value.get('id', ''))
+                if package_id:
+                    click.echo(f"Resolved '{package_name}' -> '{resolved_name}' -> '{package_id}'")
+                    return package_id
+            else:
+                click.echo(f"Resolved '{package_name}' -> '{resolved_name}' -> '{resolved_value}'")
+                return resolved_value
+                
         elif len(matches) > 1:
             click.echo(f"Multiple matches found for '{package_name}':")
-            for match in matches:
-                click.echo(f"  {match} -> {self.mappings[match]}")
+            for match in matches[:5]:  # Show first 5 matches
+                value = self.mappings[match]
+                if isinstance(value, dict):
+                    package_id = value.get('package_id', value.get('id', str(value)))
+                    click.echo(f"  {match} -> {package_id}")
+                else:
+                    click.echo(f"  {match} -> {value}")
+            if len(matches) > 5:
+                click.echo(f"  ... and {len(matches) - 5} more matches")
             return None
         
         # If no mapping found, return original name
@@ -173,6 +213,7 @@ class FOSSPackageManager:
     
     def find_adb(self):
         """Find ADB executable in PATH"""
+        # Check if adb is in PATH
         for path in os.environ.get('PATH', '').split(os.pathsep):
             adb_path = os.path.join(path, 'adb')
             if os.path.isfile(adb_path) and os.access(adb_path, os.X_OK):
@@ -182,17 +223,25 @@ class FOSSPackageManager:
         common_paths = [
             '/usr/bin/adb',
             '/usr/local/bin/adb',
-            os.path.expanduser('~/android-sdk/platform-tools/adb')
+            os.path.expanduser('~/android-sdk/platform-tools/adb'),
+            os.path.expanduser('~/Android/Sdk/platform-tools/adb'),
+            '/opt/android-sdk/platform-tools/adb'
         ]
         
         for path in common_paths:
             if os.path.isfile(path) and os.access(path, os.X_OK):
                 return path
         
-        raise FileNotFoundError("ADB not found in PATH")
+        # If not found, warn user but don't fail
+        click.echo("Warning: ADB not found in PATH. Install Android SDK platform-tools.")
+        return None
     
     def run_adb_command(self, command, capture_output=True):
         """Execute ADB command"""
+        if not self.adb_path:
+            click.echo("ADB not available. Cannot execute command.")
+            return None
+            
         cmd = [self.adb_path] + command
         try:
             result = subprocess.run(cmd, capture_output=capture_output, text=True, check=True)
@@ -203,6 +252,9 @@ class FOSSPackageManager:
     
     def get_connected_devices(self):
         """Get list of connected Android devices"""
+        if not self.adb_path:
+            return []
+            
         output = self.run_adb_command(['devices'])
         if not output:
             return []
@@ -225,6 +277,8 @@ class FOSSPackageManager:
             click.echo("Repository indices updated successfully")
         except subprocess.CalledProcessError:
             click.echo("Failed to update repository indices")
+        except FileNotFoundError:
+            click.echo("fdroidcl not found. Please install it first.")
     
     def search_packages(self, query=None, category=None):
         """Search for packages in repositories"""
@@ -236,6 +290,9 @@ class FOSSPackageManager:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             return result.stdout
         except subprocess.CalledProcessError:
+            return None
+        except FileNotFoundError:
+            click.echo("fdroidcl not found. Please install it first.")
             return None
     
     def install_package(self, package_name, device_id=None):
@@ -256,6 +313,9 @@ class FOSSPackageManager:
         except subprocess.CalledProcessError:
             click.echo(f"Failed to install {package_id}")
             return False
+        except FileNotFoundError:
+            click.echo("fdroidcl not found. Please install it first.")
+            return False
     
     def batch_install(self, package_list_file, device_id=None):
         """Install multiple packages from file"""
@@ -274,9 +334,9 @@ class FOSSPackageManager:
 @click.group()
 @click.pass_context
 def cli(ctx):
-    """FOSS Package Manager - Command-line package manager for Android FOSS apps"""
+    """APM (Android Package Manager) - Command-line package manager for Android FOSS apps"""
     ctx.ensure_object(dict)
-    ctx.obj['pm'] = FOSSPackageManager()
+    ctx.obj['pm'] = AndroidPackageManager()
 
 @cli.command()
 @click.pass_context
@@ -322,7 +382,6 @@ def devices(ctx):
     else:
         click.echo("No devices connected")
 
-# NEW MAPPING MANAGEMENT COMMANDS
 @cli.command()
 @click.pass_context
 def mappings(ctx):
@@ -335,7 +394,11 @@ def mappings(ctx):
     
     click.echo("Package Mappings:")
     for name, package_id in sorted(mappings.items()):
-        click.echo(f"  {name:<20} -> {package_id}")
+        if isinstance(package_id, dict):
+            real_id = package_id.get('package_id', package_id.get('id', str(package_id)))
+            click.echo(f"  {name:<25} -> {real_id}")
+        else:
+            click.echo(f"  {name:<25} -> {package_id}")
 
 @cli.command()
 @click.argument('friendly_name')
@@ -343,7 +406,7 @@ def mappings(ctx):
 @click.pass_context
 def add_mapping(ctx, friendly_name, package_id):
     """Add a new package mapping"""
-    mappings_path = os.path.expanduser("~/.config/foss-pm/package_mappings.yaml")
+    mappings_path = os.path.expanduser("~/.config/apm/package_mappings.yaml")
     
     # Load existing mappings
     if os.path.exists(mappings_path):
@@ -383,7 +446,7 @@ def resolve(ctx, package_name):
 @click.pass_context
 def remove_mapping(ctx, friendly_name):
     """Remove a package mapping"""
-    mappings_path = os.path.expanduser("~/.config/foss-pm/package_mappings.yaml")
+    mappings_path = os.path.expanduser("~/.config/apm/package_mappings.yaml")
     
     if not os.path.exists(mappings_path):
         click.echo("No mappings file found")
@@ -416,7 +479,7 @@ def remove_mapping(ctx, friendly_name):
 @click.pass_context
 def list_categories(ctx):
     """List all available categories"""
-    mappings_path = os.path.expanduser("~/.config/foss-pm/package_mappings.yaml")
+    mappings_path = os.path.expanduser("~/.config/apm/package_mappings.yaml")
     
     if not os.path.exists(mappings_path):
         click.echo("No mappings file found")
@@ -431,6 +494,46 @@ def list_categories(ctx):
             click.echo(f"  {category} ({len(packages)} packages)")
         else:
             click.echo(f"  {category}")
+
+@cli.command()
+@click.argument('package_name', required=False)
+@click.pass_context
+def debug_mappings(ctx, package_name):
+    """Debug package mappings"""
+    pm = ctx.obj['pm']
+    
+    if not pm.mappings:
+        click.echo("No mappings loaded")
+        return
+    
+    click.echo(f"Total mappings: {len(pm.mappings)}")
+    
+    if package_name:
+        click.echo(f"\nSearching for '{package_name}':")
+        
+        # Direct match
+        if package_name in pm.mappings:
+            value = pm.mappings[package_name]
+            click.echo(f"Direct match: {package_name} -> {value}")
+        
+        # Partial matches
+        matches = [name for name in pm.mappings.keys() 
+                  if isinstance(name, str) and isinstance(package_name, str) 
+                  and package_name.lower() in name.lower()]
+        
+        if matches:
+            click.echo(f"Partial matches ({len(matches)}):")
+            for match in matches[:10]:
+                value = pm.mappings[match]
+                click.echo(f"  {match} -> {value}")
+        else:
+            click.echo("No matches found")
+    else:
+        click.echo("\nFirst 10 mappings:")
+        for i, (key, value) in enumerate(pm.mappings.items()):
+            if i >= 10:
+                break
+            click.echo(f"  {key} -> {value}")
 
 if __name__ == '__main__':
     cli()
