@@ -265,7 +265,7 @@ PYCODE
 
 # 10) Update repositories
 echo "🔄 Updating repository indices..."
-if fdroidcl update; thenfdroidcl
+if fdroidcl update; then
     echo "✓ Repository update successful"
 else
     echo "⚠️  Repository update had issues - some repos may not be available"
