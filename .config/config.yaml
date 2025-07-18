@@ -81,14 +81,14 @@ repositories:
     
   - name: "Collabora"
     url: "https://www.collaboraoffice.com/downloads/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 9
     description: "Collabora Office repository"
     fingerprint: "573258C84E149B5F4D9299E7434B2B69A8410372921D4AE586BA91EC767892CC"
     
   - name: "Bitwarden"
     url: "https://mobileapp.bitwarden.com/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 10
     description: "Bitwarden password manager"
     fingerprint: "BC54EA6FD1CD5175EFEFC148BD4B2F284B18549B4EE7A12F7B9A2B1C5B0F9F6A"
@@ -109,14 +109,14 @@ repositories:
     
   - name: "Fedilab"
     url: "https://fdroid.fedilab.app/repo"
-    enabled: true
+    enabled: false
     priority: 13
     description: "Fedilab Mastodon client"
     fingerprint: "11F0A69910A4280E2CD3CCC3146337D006BE539B18E1A9FEACE15FF757A94FEB"
     
   - name: "Session"
     url: "https://fdroid.getsession.org/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 14
     description: "Session messenger repository"
     fingerprint: "DB0E5A6E6806A7A7F4E6B9C1BF9C8E4D6E8B9C3F2A7F4A3B9F9C8E4D6E8B9C3F"
@@ -162,6 +162,7 @@ repositories:
     priority: 20
     description: "Funkwhale music streaming"
     fingerprint: "2C1A0D7B8E9C4F3D6A5B9E8C7F4A3B9F9C8E4D6E8B9C3F2A7F4A3B9F9C8E4D6E"
+
 
 # Package filtering for FOSS apps only
 filters:

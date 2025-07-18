@@ -54,6 +54,7 @@ communication:
   briar-mailbox: "org.briarproject.mailbox"
   haven: "org.havenapp.main"
   riot-x: "im.vector.app"
+  forkgram: "org.forkgram.messenger"
 
 media:
   vlc: "org.videolan.vlc"
@@ -192,7 +193,10 @@ productivity:
   working-time: "askanimus.arbeitszeiterfassung2"
 
 system:
+  simple-keyboard: "rkr.simplekeyboard.inputmethod"
+  outertune: "om.dd3boh.outertune"
   fdroid: "org.fdroid.fdroid"
+  kernalsu: "me.weishu.kernelsu"
   aurora-store: "com.aurora.store"
   aurora-droid: "com.aurora.adroid"
   neo-store: "com.machiav3lli.fdroid"
@@ -419,6 +423,7 @@ office:
   owncloud: "com.owncloud.android"
   seafile: "com.seafile.seadroid2"
   libreoffice-reader: "at.tomtasche.reader"
+  libreoffice-viewer: "org.documentfoundation.libreoffice" 
   jtx-board: "at.techbee.jtx"
   mupdf-mini: "com.artifex.mupdf.mini.app"
   mupdf-viewer: "com.artifex.mupdf.viewer.app"
@@ -444,6 +449,7 @@ weather:
   weather-usa: "biz.binarysolutions.weatherusa"
 
 utilities:
+  navi: "com.tachibana.downloader"
   simple-flashlight: "com.simplemobiletools.flashlight"
   lumolight: "com.bitmavrick.lumolight"
   material-flashlight: "co.garmax.materialflashlight"
@@ -458,7 +464,7 @@ utilities:
   binary-eye: "de.markusfisch.android.binaryeye"
   wifi-analyzer: "com.vrem.wifianalyzer"
   speedtest: "com.dosse.speedtest"
-  simple-clock: "com.simplemobiletools.clock"
+  simple-clock: "com.better.alarm"
   alarm-clock: "com.angrydoughnuts.android.alarmclock"
   simple-alarm: "com.better.alarm"
   hourly-reminder: "com.github.axet.hourlyreminder"

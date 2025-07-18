@@ -148,7 +148,7 @@ class AndroidPackageManager:
         try:
             from urllib.parse import urljoin
             # Test the index file specifically
-            index_url = urljoin(repo_url, 'index-v1.jar')
+            index_url = urljoin(repo_url+"/repo", 'index-v1.jar')
             
             response = requests.head(index_url, timeout=10, allow_redirects=True)
             return response.status_code in [200, 304]  # 304 = Not Modified (cached)
