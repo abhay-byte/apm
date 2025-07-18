@@ -18,6 +18,181 @@ class AndroidPackageManager:
         self.mappings = self.load_mappings()
         self.repo_cache = {}
         self.adb_path = self.find_adb()
+
+    def get_installed_packages(self, device_id=None):
+        """Get list of installed packages on device"""
+        if not self.adb_path:
+            return []
+        
+        cmd = ['shell', 'pm', 'list', 'packages', '-3']  # -3 for third-party apps only
+        if device_id:
+            cmd = ['-s', device_id] + cmd
+        
+        output = self.run_adb_command(cmd)
+        if not output:
+            return []
+        
+        packages = []
+        for line in output.split('\n'):
+            if line.startswith('package:'):
+                package_name = line.replace('package:', '').strip()
+                packages.append(package_name)
+        
+        return packages
+
+    def get_package_version(self, package_name, device_id=None):
+        """Get installed version of a package on device"""
+        if not self.adb_path:
+            return None
+        
+        cmd = ['shell', 'dumpsys', 'package', package_name]
+        if device_id:
+            cmd = ['-s', device_id] + cmd
+        
+        output = self.run_adb_command(cmd)
+        if not output:
+            return None
+        
+        for line in output.split('\n'):
+            if 'versionName=' in line:
+                version = line.split('versionName=')[1].split()[0]
+                return version.strip()
+        
+        return None
+
+    def get_available_updates(self, device_id=None):
+        """Check for available updates for installed packages"""
+        installed_packages = self.get_installed_packages(device_id)
+        updates_available = []
+        
+        if not installed_packages:
+            return updates_available
+        
+        click.echo(f"Checking for updates for {len(installed_packages)} installed packages...")
+        
+        # Use fdroidcl to check for updates
+        try:
+            for package in installed_packages:
+                # Get current version
+                current_version = self.get_package_version(package, device_id)
+                
+                # Check if package is available in repositories
+                result = subprocess.run(['fdroidcl', 'show', package], 
+                                    capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    # Parse fdroidcl output to get latest version
+                    output = result.stdout
+                    latest_version = None
+                    
+                    for line in output.split('\n'):
+                        if 'Version:' in line:
+                            latest_version = line.split('Version:')[1].strip()
+                            break
+                    
+                    if latest_version and current_version and latest_version != current_version:
+                        updates_available.append({
+                            'package': package,
+                            'current_version': current_version,
+                            'latest_version': latest_version
+                        })
+        
+        except subprocess.CalledProcessError:
+            click.echo("Error checking for updates")
+        
+        return updates_available
+
+    def update_device_packages(self, device_id=None, auto_update=False):
+        """Update packages on connected device"""
+        updates = self.get_available_updates(device_id)
+        
+        if not updates:
+            click.echo("✓ All packages are up to date")
+            return True
+        
+        click.echo(f"Found {len(updates)} package updates available:")
+        for update in updates:
+            click.echo(f"  {update['package']}: {update['current_version']} → {update['latest_version']}")
+        
+        if not auto_update:
+            if not click.confirm(f"Update {len(updates)} packages?"):
+                return False
+        
+        # Update packages
+        success_count = 0
+        for update in updates:
+            package = update['package']
+            click.echo(f"Updating {package}...")
+            
+            if device_id:
+                os.environ['ANDROID_SERIAL'] = device_id
+            
+            try:
+                subprocess.run(['fdroidcl', 'install', package], check=True)
+                click.echo(f"✓ Updated {package}")
+                success_count += 1
+            except subprocess.CalledProcessError:
+                click.echo(f"✗ Failed to update {package}")
+        
+        click.echo(f"Successfully updated {success_count}/{len(updates)} packages")
+        return success_count == len(updates)
+
+    def update_repositories(self):
+        """Update repository indices and device packages"""
+        click.echo("Updating repository indices...")
+        
+        # Update repository indices
+        repo_success = True
+        try:
+            subprocess.run(['fdroidcl', 'update'], check=True)
+            click.echo("✓ Repository indices updated successfully")
+        except subprocess.CalledProcessError:
+            click.echo("✗ Failed to update repository indices")
+            repo_success = False
+        except FileNotFoundError:
+            click.echo("✗ fdroidcl not found. Please install it first.")
+            return False
+        
+        # Check for connected devices
+        devices = self.get_connected_devices()
+        
+        if not devices:
+            click.echo("No Android devices connected")
+            return repo_success
+        
+        click.echo(f"Found {len(devices)} connected device(s)")
+        
+        # Update packages on each device
+        for device in devices:
+            click.echo(f"\nChecking device: {device}")
+            
+            # Get device info
+            device_info = self.get_device_info(device)
+            if device_info:
+                click.echo(f"Device: {device_info}")
+            
+            # Update packages on this device
+            self.update_device_packages(device, auto_update=False)
+        
+        return repo_success
+
+    def get_device_info(self, device_id):
+        """Get basic device information"""
+        if not self.adb_path:
+            return None
+        
+        try:
+            # Get device model
+            model_result = self.run_adb_command(['-s', device_id, 'shell', 'getprop', 'ro.product.model'])
+            brand_result = self.run_adb_command(['-s', device_id, 'shell', 'getprop', 'ro.product.brand'])
+            
+            if model_result and brand_result:
+                return f"{brand_result} {model_result}"
+            
+            return device_id
+        except:
+            return device_id
+
     
     def load_config(self, path):
         """Load configuration from YAML file"""
@@ -534,6 +709,90 @@ def debug_mappings(ctx, package_name):
             if i >= 10:
                 break
             click.echo(f"  {key} -> {value}")
+
+@cli.command()
+@click.option('--device', help='Target specific device ID')
+@click.option('--packages-only', is_flag=True, help='Only update packages, skip repository update')
+@click.option('--repos-only', is_flag=True, help='Only update repositories, skip package updates')
+@click.option('--auto-yes', is_flag=True, help='Automatically confirm package updates')
+@click.pass_context
+def update(ctx, device, packages_only, repos_only, auto_yes):
+    """Update repository indices and device packages"""
+    pm = ctx.obj['pm']
+    
+    if packages_only and repos_only:
+        click.echo("Error: Cannot use --packages-only and --repos-only together")
+        return
+    
+    if repos_only:
+        # Only update repositories
+        try:
+            subprocess.run(['fdroidcl', 'update'], check=True)
+            click.echo("✓ Repository indices updated successfully")
+        except subprocess.CalledProcessError:
+            click.echo("✗ Failed to update repository indices")
+        except FileNotFoundError:
+            click.echo("✗ fdroidcl not found. Please install it first.")
+        return
+    
+    if packages_only:
+        # Only update packages
+        devices = pm.get_connected_devices()
+        if not devices:
+            click.echo("No Android devices connected")
+            return
+        
+        target_device = device if device else devices[0]
+        pm.update_device_packages(target_device, auto_update=auto_yes)
+        return
+    
+    # Full update (default behavior)
+    pm.update_repositories()
+
+@cli.command()
+@click.option('--device', help='Target specific device ID')
+@click.pass_context
+def upgrade(ctx, device):
+    """Update packages on connected devices"""
+    pm = ctx.obj['pm']
+    
+    devices = pm.get_connected_devices()
+    if not devices:
+        click.echo("No Android devices connected")
+        return
+    
+    target_devices = [device] if device else devices
+    
+    for dev in target_devices:
+        click.echo(f"\nUpdating packages on device: {dev}")
+        pm.update_device_packages(dev, auto_update=False)
+
+@cli.command()
+@click.option('--device', help='Target specific device ID')
+@click.pass_context
+def list_updates(ctx, device):
+    """List available package updates"""
+    pm = ctx.obj['pm']
+    
+    devices = pm.get_connected_devices()
+    if not devices:
+        click.echo("No Android devices connected")
+        return
+    
+    target_device = device if device else devices[0]
+    updates = pm.get_available_updates(target_device)
+    
+    if not updates:
+        click.echo("✓ All packages are up to date")
+        return
+    
+    click.echo(f"Available updates for device {target_device}:")
+    click.echo(f"{'Package':<40} {'Current':<15} {'Latest':<15}")
+    click.echo("-" * 70)
+    
+    for update in updates:
+        click.echo(f"{update['package']:<40} {update['current_version']:<15} {update['latest_version']:<15}")
+
 
 if __name__ == '__main__':
     cli()

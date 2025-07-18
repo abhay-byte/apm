@@ -1,6 +1,21 @@
 auto_update: true
 cache_dir: ~/.cache/foss-pm
 download_dir: ~/.cache/foss-pm/apks
+# Update settings
+updates:
+  check_device_updates: true
+  auto_update_packages: false
+  update_check_interval: "daily"
+  prompt_before_update: true
+  max_concurrent_updates: 3
+  exclude_packages: []
+  
+# Device settings
+devices:
+  auto_detect: true
+  preferred_device: null
+  timeout: 30
+
 filters:
   categories:
   - System
