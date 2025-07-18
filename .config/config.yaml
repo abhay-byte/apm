@@ -60,7 +60,7 @@ repositories:
     
   - name: "microG"
     url: "https://microg.org/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 6
     description: "microG Project repository"
     fingerprint: "9BD06727E62796C0130EB6DAB39B73157451582CBD138E86C468ACC395D14165"
@@ -123,42 +123,42 @@ repositories:
     
   - name: "Molly"
     url: "https://molly.im/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 15
     description: "Molly Signal fork"
     fingerprint: "5198DAEF37FC23C14F5087E207A778E2DE99CA98D1FB651E982F8FDD1A0B6A7C"
     
   - name: "Threema"
     url: "https://releases.threema.ch/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 16
     description: "Threema messenger repository"
     fingerprint: "5734E753899B25775D90FE85362A49866E05AC4F83C05BEF5A92880D2910639E"
     
   - name: "GrapheneOS"
     url: "https://seamlessupdate.app/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 17
     description: "GrapheneOS apps repository"
     fingerprint: "A78B62654F1DE0288E6A6A8FDD14F2E8A3E103B3C7A4D5E5F2D78B6558B9D38C"
     
   - name: "DivestOS"
     url: "https://divestos.org/fdroid/official"
-    enabled: true
+    enabled: false
     priority: 18
     description: "DivestOS official repository"
     fingerprint: "E4BE8D6ABDD9E2CB6DAD3F9B2A5F0A3A8B1B9C4D6E8B9C3F2A7F4A3B9F9C8E4D"
     
   - name: "Briar"
     url: "https://briarproject.org/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 19
     description: "Briar messenger repository"
     fingerprint: "1FB5FCB68E1B1E1F7B6B9C8E4D6E8B9C3F2A7F4A3B9F9C8E4D6E8B9C3F2A7F4A"
     
   - name: "Funkwhale"
     url: "https://fdroid.funkwhale.audio/fdroid/repo"
-    enabled: true
+    enabled: false
     priority: 20
     description: "Funkwhale music streaming"
     fingerprint: "2C1A0D7B8E9C4F3D6A5B9E8C7F4A3B9F9C8E4D6E8B9C3F2A7F4A3B9F9C8E4D6E"
