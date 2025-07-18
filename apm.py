@@ -11,6 +11,9 @@ import click
 from pathlib import Path
 import yaml
 import requests
+import time
+import re
+from datetime import datetime
 
 class AndroidPackageManager:
     def __init__(self, config_path="config.yaml"):
@@ -60,88 +63,439 @@ class AndroidPackageManager:
         
         return None
 
+    def parse_latest_version_from_fdroidcl(self, output):
+        """Parse version from fdroidcl show output with strict validation"""
+        if not output:
+            return None
+        
+        lines = output.split('\n')
+        found_versions = []
+        
+        # Look for version patterns with strict validation
+        for line in lines:
+            line = line.strip()
+            
+            # Standard fdroidcl patterns
+            if line.startswith('Version:'):
+                version = line.split('Version:', 1)[1].strip()
+                # Clean up and validate
+                version = version.split('(')[0].strip()  # Remove version code
+                version = version.split()[0]             # Take first word
+                
+                # Validate version format (must contain digits and dots/dashes)
+                if re.match(r'^[\d\.\-\w]+$', version) and any(c.isdigit() for c in version):
+                    # Reject obviously invalid versions
+                    invalid_patterns = ['only', 'latest', 'current', 'version', 'unknown', 'null', 'none']
+                    if not any(invalid in version.lower() for invalid in invalid_patterns):
+                        found_versions.append(version)
+        
+        # If no standard version found, look for semantic version patterns
+        if not found_versions:
+            for line in lines:
+                # Look for patterns like "1.2.3", "v1.2.3", "2025.06.26-3"
+                version_matches = re.findall(r'\b(?:v?)(\d+(?:\.\d+)*(?:[-\.\w]*)?)\b', line)
+                for version in version_matches:
+                    # Validate it looks like a real version
+                    if (len(version) >= 3 and 
+                        '.' in version and 
+                        version.count('.') <= 5 and  # Not too many dots
+                        any(c.isdigit() for c in version)):
+                        found_versions.append(version)
+        
+        # Return the most reasonable version (usually the first valid one)
+        return found_versions[0] if found_versions else None
+
+    def is_valid_version(self, version_str):
+        """Validate that a version string looks reasonable"""
+        if not version_str or len(version_str) < 2:
+            return False
+        
+        # Must contain at least one digit
+        if not any(c.isdigit() for c in version_str):
+            return False
+        
+        # Reject obviously invalid patterns
+        invalid_patterns = [
+            'only', 'latest', 'current', 'version', 'unknown', 'null', 'none',
+            'description', 'name', 'title', 'app', 'package', 'install',
+            'download', 'file', 'url', 'http', 'www', 'com', 'org'
+        ]
+        
+        if any(invalid in version_str.lower() for invalid in invalid_patterns):
+            return False
+        
+        # Should not be too long (probably not a version)
+        if len(version_str) > 20:
+            return False
+        
+        return True
+
+    def normalize_version(self, version):
+        """Normalize version string for comparison"""
+        # Remove common prefixes
+        version = version.lstrip('v')
+        # Replace multiple separators with single dot
+        version = re.sub(r'[-_]+', '.', version)
+        return version
+
+    def split_version_parts(self, version):
+        """Split version into numeric and text parts"""
+        parts = version.split('.')
+        numeric = []
+        text = []
+        
+        for part in parts:
+            # Extract numeric part
+            numeric_match = re.match(r'(\d+)', part)
+            if numeric_match:
+                numeric.append(int(numeric_match.group(1)))
+                # Extract remaining text
+                remaining = part[len(numeric_match.group(1)):]
+                if remaining:
+                    text.append(remaining)
+            else:
+                text.append(part)
+        
+        return {'numeric': numeric, 'text': text}
+
+    def compare_versions_semantic(self, latest, current):
+        """Improved semantic version comparison"""
+        try:
+            # Normalize versions for comparison
+            latest_norm = self.normalize_version(latest)
+            current_norm = self.normalize_version(current)
+            
+            # Split into numeric and text parts
+            latest_parts = self.split_version_parts(latest_norm)
+            current_parts = self.split_version_parts(current_norm)
+            
+            # Compare numeric parts first
+            for i in range(max(len(latest_parts['numeric']), len(current_parts['numeric']))):
+                l_part = latest_parts['numeric'][i] if i < len(latest_parts['numeric']) else 0
+                c_part = current_parts['numeric'][i] if i < len(current_parts['numeric']) else 0
+                
+                if l_part > c_part:
+                    return True
+                elif l_part < c_part:
+                    return False
+            
+            # If numeric parts are equal, compare text parts
+            if latest_parts['text'] and current_parts['text']:
+                return latest_parts['text'] > current_parts['text']
+            
+            return False
+            
+        except Exception:
+            return False
+
+    def is_version_newer(self, latest, current):
+        """Enhanced version comparison with better validation"""
+        if not latest or not current:
+            return False
+        
+        if latest == current:
+            return False
+        
+        # Pre-validate versions
+        if not self.is_valid_version(latest) or not self.is_valid_version(current):
+            return False
+        
+        try:
+            # Try semantic versioning first
+            from packaging import version
+            return version.parse(latest) > version.parse(current)
+        except ImportError:
+            return self.compare_versions_semantic(latest, current)
+        except Exception as e:
+            # If parsing fails, be conservative
+            return False
+
+    def is_questionable_update(self, current, latest):
+        """Detect questionable version updates"""
+        try:
+            # Flag major version jumps (might be incorrect)
+            current_major = int(current.split('.')[0])
+            latest_major = int(latest.split('.')[0])
+            
+            # Major version jump of more than 2 is suspicious
+            if latest_major - current_major > 2:
+                return True
+            
+            # Version downgrades are suspicious
+            if latest_major < current_major:
+                return True
+            
+            # Weird version patterns
+            if any(suspicious in latest.lower() for suspicious in ['only', 'dev', 'test', 'debug', 'alpha', 'beta']):
+                return True
+            
+            return False
+            
+        except (ValueError, IndexError):
+            # If we can't parse versions properly, flag as questionable
+            return True
+
     def get_available_updates(self, device_id=None):
-        """Check for available updates for installed packages"""
+        """Enhanced version with validation and debugging"""
         installed_packages = self.get_installed_packages(device_id)
         updates_available = []
+        questionable_updates = []
         
         if not installed_packages:
+            click.echo("⚠️  No installed packages found")
             return updates_available
         
-        click.echo(f"Checking for updates for {len(installed_packages)} installed packages...")
+        click.echo(f"🔍 Checking {len(installed_packages)} installed packages for updates...")
         
-        # Use fdroidcl to check for updates
+        check_count = 0
+        not_in_repos = 0
+        parsing_errors = 0
+        
         try:
-            for package in installed_packages:
-                # Get current version
+            for i, package in enumerate(installed_packages):
+                # Show progress
+                if i % 5 == 0 or i == len(installed_packages) - 1:
+                    progress = (i + 1) / len(installed_packages) * 100
+                    click.echo(f"\r   📊 Progress: {progress:.1f}% ({i+1}/{len(installed_packages)}) - Found {len(updates_available)} updates", nl=False)
+                
+                # Get current version from device
                 current_version = self.get_package_version(package, device_id)
+                if not current_version:
+                    continue
                 
-                # Check if package is available in repositories
-                result = subprocess.run(['fdroidcl', 'show', package], 
-                                    capture_output=True, text=True)
-                
-                if result.returncode == 0:
-                    # Parse fdroidcl output to get latest version
-                    output = result.stdout
-                    latest_version = None
+                try:
+                    result = subprocess.run(['fdroidcl', 'show', package], 
+                                        capture_output=True, text=True, timeout=15)
                     
-                    for line in output.split('\n'):
-                        if 'Version:' in line:
-                            latest_version = line.split('Version:')[1].strip()
-                            break
+                    if result.returncode != 0:
+                        not_in_repos += 1
+                        continue
                     
-                    if latest_version and current_version and latest_version != current_version:
-                        updates_available.append({
+                    # Parse version with validation
+                    latest_version = self.parse_latest_version_from_fdroidcl(result.stdout)
+                    
+                    if not latest_version:
+                        parsing_errors += 1
+                        continue
+                    
+                    # Validate both versions
+                    if not self.is_valid_version(current_version) or not self.is_valid_version(latest_version):
+                        continue
+                    
+                    # Check if update looks reasonable
+                    if self.is_version_newer(latest_version, current_version):
+                        update_info = {
                             'package': package,
                             'current_version': current_version,
                             'latest_version': latest_version
-                        })
+                        }
+                        
+                        # Flag questionable updates for review
+                        if self.is_questionable_update(current_version, latest_version):
+                            questionable_updates.append(update_info)
+                            click.echo(f"\n   🤔 Questionable: {package} {current_version} → {latest_version}")
+                        else:
+                            updates_available.append(update_info)
+                            if len(updates_available) <= 3:
+                                click.echo(f"\n   ✅ Valid update: {package} {current_version} → {latest_version}")
+                    
+                except subprocess.TimeoutExpired:
+                    continue
+                except Exception as e:
+                    continue
+                
+                check_count += 1
         
-        except subprocess.CalledProcessError:
-            click.echo("Error checking for updates")
+        except KeyboardInterrupt:
+            click.echo(f"\n⚠️  Update check interrupted")
+        
+        # Clear progress line
+        click.echo(f"\r   📊 Update check completed: {check_count} checked, {not_in_repos} not in repos, {parsing_errors} parsing errors")
+        
+        # Handle questionable updates
+        if questionable_updates:
+            click.echo(f"\n🤔 Found {len(questionable_updates)} questionable updates:")
+            for update in questionable_updates:
+                click.echo(f"   {update['package']}: {update['current_version']} → {update['latest_version']}")
+            
+            if click.confirm("   Include questionable updates? (Not recommended)"):
+                updates_available.extend(questionable_updates)
+            else:
+                click.echo("   Questionable updates excluded from update list")
         
         return updates_available
 
     def update_device_packages(self, device_id=None, auto_update=False):
-        """Update packages on connected device"""
+        """Update packages on connected device with enhanced visualization and debugging"""
+        start_time = time.time()
+        click.echo("🔍 Analyzing device packages...")
+        
+        # Get installed packages count
         try:
-            updates = self.get_available_updates(device_id)
+            installed_packages = self.get_installed_packages(device_id)
+            total_installed = len(installed_packages)
+            click.echo(f"📱 Device has {total_installed} packages installed")
+            
+            # Show a sample of installed packages for debugging
+            if total_installed > 0:
+                click.echo(f"📦 Sample packages: {', '.join(installed_packages[:5])}{'...' if total_installed > 5 else ''}")
+            
         except Exception as e:
-            click.echo(f"⚠️  Could not check for updates: {e}")
-            # Try to continue with cached repository data
+            click.echo(f"⚠️  Could not enumerate installed packages: {e}")
+            total_installed = 0
+        
+        # Check for available updates with better error handling
+        try:
+            click.echo("\n🔍 Detailed update analysis:")
+            updates = self.get_available_updates(device_id)
+            update_check_time = time.time() - start_time
+            click.echo(f"⏱️  Update check completed in {update_check_time:.1f}s")
+        except Exception as e:
+            click.echo(f"❌ Could not check for updates: {e}")
+            import traceback
+            click.echo(f"🐛 Debug traceback:\n{traceback.format_exc()}")
             updates = []
         
+        # Statistics summary
+        click.echo("\n📊 Package Statistics:")
+        click.echo("=" * 50)
+        click.echo(f"📦 Total packages installed: {total_installed}")
+        click.echo(f"🔄 Packages with updates available: {len(updates)}")
+        click.echo(f"✅ Packages up to date: {total_installed - len(updates)}")
+        
         if not updates:
-            click.echo("✓ All packages are up to date (or no updates could be determined)")
+            click.echo("\n🎯 No updates found!")
+            
+            # Enhanced debugging when no updates are found
+            if total_installed > 0:
+                click.echo("\n🔍 Debug Information:")
+                click.echo("Possible reasons for no updates:")
+                click.echo("• All packages are actually up to date")
+                click.echo("• Packages not available in configured repositories")
+                click.echo("• Repository indices need updating")
+                click.echo("• Version parsing issues")
+                
+                click.echo(f"\n💡 Try running:")
+                click.echo(f"   fdroidcl update                    # Update repository indices")
+                click.echo(f"   apm repo-status                    # Check repository connectivity")
+                click.echo(f"   fdroidcl show {installed_packages[0] if installed_packages else 'com.example.app'}  # Test package lookup")
+            
             return True
         
-        click.echo(f"Found {len(updates)} package updates available:")
+        # Show available updates in a nice table format
+        click.echo(f"\n📋 Available Updates ({len(updates)} packages):")
+        click.echo("=" * 80)
+        click.echo(f"{'Package':<35} {'Current':<15} {'→':<3} {'Latest':<15}")
+        click.echo("-" * 80)
+        
         for update in updates:
-            click.echo(f"  {update['package']}: {update['current_version']} → {update['latest_version']}")
+            package_name = update['package']
+            current_ver = update['current_version']
+            latest_ver = update['latest_version']
+            
+            # Truncate long package names
+            display_name = package_name[:33] + ".." if len(package_name) > 35 else package_name
+            
+            click.echo(f"{display_name:<35} {current_ver:<15} {'→':<3} {latest_ver:<15}")
+        
+        click.echo("-" * 80)
+        
+        # Update size estimation
+        estimated_time = len(updates) * 15
+        click.echo(f"⏱️  Estimated update time: ~{estimated_time//60}m {estimated_time%60}s")
         
         if not auto_update:
-            if not click.confirm(f"Update {len(updates)} packages?"):
+            if not click.confirm(f"\n❓ Update {len(updates)} packages?"):
+                click.echo("🚫 Update cancelled by user")
                 return False
         
-        # Update packages
+        # Start updating packages
+        click.echo(f"\n🚀 Starting update process for {len(updates)} packages...")
+        click.echo("=" * 60)
+        
         success_count = 0
-        for update in updates:
+        failed_packages = []
+        
+        for i, update in enumerate(updates, 1):
             package = update['package']
-            click.echo(f"Updating {package}...")
+            current_ver = update['current_version']
+            latest_ver = update['latest_version']
+            
+            # Progress indicator
+            progress = f"[{i}/{len(updates)}]"
+            click.echo(f"\n{progress} 🔄 Updating {package}...")
+            click.echo(f"      📤 {current_ver} → 📥 {latest_ver}")
             
             if device_id:
                 os.environ['ANDROID_SERIAL'] = device_id
             
+            package_start_time = time.time()
+            
             try:
-                subprocess.run(['fdroidcl', 'install', package], check=True)
-                click.echo(f"✓ Updated {package}")
+                # Run update with timeout
+                result = subprocess.run(['fdroidcl', 'install', package], 
+                                    check=True, capture_output=True, text=True, timeout=120)
+                
+                package_time = time.time() - package_start_time
+                click.echo(f"      ✅ Updated in {package_time:.1f}s")
                 success_count += 1
+                
+            except subprocess.TimeoutExpired:
+                click.echo(f"      ⏰ Timeout after 2 minutes")
+                failed_packages.append({'package': package, 'reason': 'timeout'})
+                
             except subprocess.CalledProcessError as e:
-                click.echo(f"⚠️  Failed to update {package}: {e}")
-                # Continue with other packages
+                error_msg = e.stderr.strip() if e.stderr else str(e)
+                click.echo(f"      ❌ Failed: {error_msg}")
+                failed_packages.append({'package': package, 'reason': error_msg})
+            
+            # Show progress bar
+            progress_percent = (i / len(updates)) * 100
+            filled_blocks = int(progress_percent // 5)
+            progress_bar = "█" * filled_blocks + "░" * (20 - filled_blocks)
+            click.echo(f"      Progress: |{progress_bar}| {progress_percent:.1f}%")
         
-        click.echo(f"Successfully updated {success_count}/{len(updates)} packages")
-        return success_count > 0  # Return True if at least one package was updated
+        # Final summary
+        total_time = time.time() - start_time
+        click.echo("\n" + "=" * 60)
+        click.echo("📈 Update Summary")
+        click.echo("=" * 60)
+        
+        if success_count == len(updates):
+            click.echo(f"🎉 Perfect! All {success_count} packages updated successfully!")
+        elif success_count > 0:
+            click.echo(f"✅ {success_count}/{len(updates)} packages updated successfully")
+            click.echo(f"❌ {len(failed_packages)} packages failed to update")
+        else:
+            click.echo(f"💔 No packages were updated successfully")
+        
+        click.echo(f"⏱️  Total time: {total_time//60:.0f}m {total_time%60:.1f}s")
+        click.echo(f"📊 Success rate: {(success_count/len(updates)*100):.1f}%")
+        
+        # Show failed packages if any
+        if failed_packages:
+            click.echo(f"\n❌ Failed Updates ({len(failed_packages)}):")
+            click.echo("-" * 50)
+            for failed in failed_packages:
+                reason = failed['reason'][:40] + "..." if len(failed['reason']) > 40 else failed['reason']
+                click.echo(f"  📦 {failed['package']}")
+                click.echo(f"     💔 {reason}")
+        
+        # Recommendations
+        if failed_packages:
+            click.echo(f"\n💡 Recommendations:")
+            click.echo("   • Check network connectivity")
+            click.echo("   • Run 'apm repo-status' to check repository health")
+            click.echo("   • Try updating failed packages individually")
+            click.echo("   • Run 'fdroidcl update' to refresh repository indices")
+        
+        # Device storage recommendation
+        if success_count > 0:
+            click.echo(f"\n🧹 Consider running device cleanup after {success_count} updates")
+        
+        click.echo(f"\n📱 Device update completed at {datetime.now().strftime('%H:%M:%S')}")
+        
+        return success_count > 0
 
     def test_repository_connectivity(self, repo_url):
         """Test if a repository is reachable"""
