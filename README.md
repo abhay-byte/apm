@@ -1,6 +1,5 @@
 # <img src="https://cdn.simpleicons.org/android" alt="Android" width="25"/> APM (Android Package Manager)  
 
-### 📊 Repository Stats & Status
 <p>
     <a href="https://github.com/abhay-byte/apm/releases/latest">
         <img src="https://img.shields.io/github/v/release/abhay-byte/apm?style=flat" alt="Latest Release"/>
@@ -14,28 +13,6 @@
 </p>
 
 
-### 💻 Tech Stack & Compatibility
-<p>
-    <a href="https://github.com/abhay-byte/apm">
-        <img src="https://img.shields.io/github/languages/top/abhay-byte/apm?style=flat" alt="Top Language"/>
-    </a>
-    <a href="https://www.python.org/">
-        <img src="https://img.shields.io/badge/Python-3.8%2B-green?style=flat" alt="Python Version"/>
-    </a>
-    <a href="https://golang.org/">
-        <img src="https://img.shields.io/badge/Go-1.13%2B-blue?style=flat" alt="Go Version"/>
-    </a>
-</p>
-
-### 📜 License & Contributions
-<p>
-    <a href="https://opensource.org/licenses/GPL-3.0">
-        <img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=flat" alt="License"/>
-    </a>
-    <a href="https://github.com/abhay-byte/apm/pulls">
-        <img src="https://img.shields.io/badge/contributions-welcome-brightgreen?style=flat" alt="Contributions Welcome"/>
-    </a>
-</p>
 
 **APM** is a lightweight, config-driven command-line tool for managing Free and Open Source Software (FOSS) Android applications. It integrates multiple F-Droid-compatible repositories, provides friendly package name mappings, and handles installation, updates, and curation with robust error handling. APM ensures all operations are driven solely by your configuration files—no hardcoded defaults.
 
@@ -43,26 +20,6 @@
 -   **Backend:** Powered by `fdroidcl` for repository management and `adb` for device interactions.
 -   **Key Strength:** Fully customizable via YAML configs for repositories, mappings, and filters.
 
-## Features
-
--   **Multi-Repository Support:** Add, manage, and update from any F-Droid-compatible repo defined in your config.
--   **Friendly Package Mappings:** Install apps using simple names (e.g., `apm install firefox`) via a customizable YAML database.
--   **Batch Installation:** Install multiple apps from a text file (e.g., `essential_packages.txt`).
--   **Automatic Updates:** Update repositories and device packages with one command, skipping unreachable repos.
--   **Curation Filters:** Enforce approved licenses, categories, and block anti-features (e.g., tracking, ads).
--   **Device Management:** Detect connected devices, install/update packages on specific devices.
--   **Robust Error Handling:** Connectivity checks, timeout handling, and continuation on failures.
--   **Config-Only Design:** All settings (paths, repos, logging) loaded from YAML—no defaults in code.
--   **Bash Completion:** Auto-complete commands and package names.
--   **Desktop Integration:** Includes a `.desktop` entry for easy launching.
-
-## Requirements
-
--   **Operating System:** Linux, macOS, or Windows (via WSL).
--   **Python 3.8+** with packages: `pyyaml`, `requests`, `click` (installed via script).
--   **Go 1.13+** for `fdroidcl` (installed via script).
--   **ADB** (Android Debug Bridge) for device interactions.
--   **Optional:** Git for cloning and updating the repo.
 
 ## Installation
 
@@ -73,34 +30,21 @@
     cd apm
     ```
 
-2.  **Prepare Configuration Files:**
-    -   Place your `config.yaml`, `package_mappings.yaml`, and optional `curation_config.yaml` in the repo's root or `~/.config/apm/` directory.
-    -   See [Configuration](#configuration) for details.
-
-3.  **Run the Installer:**
+2.  **Run the Installer:**
 
     ```bash
     chmod +x install.sh
     ./install.sh
     ```
 
-    The script will:
-    -   Verify prerequisites.
-    -   Create config/cache directories.
-    -   Install dependencies.
-    -   Copy and validate configs (fixing paths if needed).
-    -   Add enabled repositories from your `config.yaml`.
-    -   Perform initial repo update (skipping unreachable ones).
-    -   Install the `apm` command and extras (completion, desktop entry).
-
-4.  **Add to PATH (if needed):**
+3.  **Add to PATH (if needed):**
 
     ```bash
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
     source ~/.bashrc
     ```
 
-5.  **Verify:**
+4.  **Verify:**
 
     ```bash
     apm --help
