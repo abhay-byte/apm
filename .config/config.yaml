@@ -58,20 +58,6 @@ repositories:
     description: "Third-party F-Droid compatible repository"
     fingerprint: "3BF0D6ABFEAE2F401707B6D966BE743BF0EEE49C2561B9BA39073711F628937A"
     
-  - name: "Guardian Project"
-    url: "https://guardianproject.info/fdroid/repo"
-    enabled: true
-    priority: 4
-    description: "Privacy and security focused apps"
-    fingerprint: "B7C2EEFD8DAC7806AF67DFCD92EB18126BC08312A7F2D6F3862E46013C7A6135"
-    
-  - name: "Guardian Project Archive"
-    url: "https://guardianproject.info/fdroid/archive"
-    enabled: false
-    priority: 5
-    description: "Archive of Guardian Project apps"
-    fingerprint: "B7C2EEFD8DAC7806AF67DFCD92EB18126BC08312A7F2D6F3862E46013C7A6135"
-    
   - name: "microG"
     url: "https://microg.org/fdroid/repo"
     enabled: true

@@ -143,48 +143,124 @@ class AndroidPackageManager:
         click.echo(f"Successfully updated {success_count}/{len(updates)} packages")
         return success_count > 0  # Return True if at least one package was updated
 
+    def test_repository_connectivity(self, repo_url):
+        """Test if a repository is reachable"""
+        try:
+            from urllib.parse import urljoin
+            # Test the index file specifically
+            index_url = urljoin(repo_url, 'index-v1.jar')
             
+            response = requests.head(index_url, timeout=10, allow_redirects=True)
+            return response.status_code in [200, 304]  # 304 = Not Modified (cached)
+            
+        except requests.exceptions.RequestException:
+            return False
+
+    def get_enabled_repositories(self):
+        """Get list of enabled repositories from config"""
+        repositories = self.config.get('repositories', [])
+        enabled_repos = [repo for repo in repositories if repo.get('enabled', True)]
+        return enabled_repos
+
     def update_repositories(self):
-        """Update repository indices and device packages"""
+        """Update repository indices with robust error handling"""
         click.echo("Updating repository indices...")
         
-        # Update repository indices - don't fail if this doesn't work
-        repo_success = True
+        # Get repositories from config only - no defaults
+        repositories = self.get_enabled_repositories()
+        
+        if not repositories:
+            click.echo("❌ No repositories configured or all repositories are disabled")
+            click.echo("   Please check your configuration file: ~/.config/apm/config.yaml")
+            return False
+        
+        click.echo(f"Found {len(repositories)} enabled repositories in configuration")
+        
+        # Test repository connectivity first
+        working_repos = []
+        failed_repos = []
+        
+        for repo in repositories:
+            repo_name = repo['name']
+            repo_url = repo['url']
+            
+            click.echo(f"Testing {repo_name} connectivity...")
+            
+            if self.test_repository_connectivity(repo_url):
+                click.echo(f"✓ {repo_name} is reachable")
+                working_repos.append(repo)
+            else:
+                click.echo(f"⚠️  {repo_name} is unreachable - skipping")
+                failed_repos.append(repo_name)
+        
+        if not working_repos:
+            click.echo("❌ No repositories are currently reachable")
+            click.echo("   Will attempt device updates with cached data...")
+            self.check_device_updates()
+            return False
+        
+        click.echo(f"Proceeding with {len(working_repos)} working repositories")
+        
+        # Update fdroidcl repositories
         try:
             result = subprocess.run(['fdroidcl', 'update'], 
-                                capture_output=True, text=True, check=True)
-            click.echo("✓ Repository indices updated successfully")
-        except subprocess.CalledProcessError as e:
-            click.echo("⚠️  Repository update had issues:")
-            if e.stderr:
-                # Show specific errors but continue
-                for line in e.stderr.split('\n'):
+                                  capture_output=True, text=True, timeout=120)
+            
+            if result.returncode == 0:
+                click.echo("✓ Repository indices updated successfully")
+                repo_success = True
+            else:
+                # Parse stderr to identify specific repository failures
+                stderr_lines = result.stderr.split('\n') if result.stderr else []
+                
+                click.echo("⚠️  Repository update completed with some errors:")
+                for line in stderr_lines:
                     if line.strip():
+                        # Filter out known problematic repositories from error display
+                        if any(failed_repo.lower().replace(' ', '') in line.lower() 
+                               for failed_repo in failed_repos):
+                            continue  # Skip showing errors for already identified failed repos
                         click.echo(f"   {line}")
+                
+                repo_success = len(working_repos) > len(failed_repos)
+                    
+        except subprocess.TimeoutExpired:
+            click.echo("⚠️  Repository update timed out")
+            repo_success = False
+        except subprocess.CalledProcessError as e:
+            click.echo(f"⚠️  Repository update failed: {e}")
             repo_success = False
         except FileNotFoundError:
-            click.echo("✗ fdroidcl not found. Please install it first.")
-            # Don't return here - we can still check device updates
-            repo_success = False
+            click.echo("❌ fdroidcl not found. Please install it first.")
+            return False
         
-        # Always continue to device updates regardless of repository status
-        click.echo("\nChecking for device package updates...")
+        # Summary of repository status
+        if failed_repos:
+            click.echo(f"\n⚠️  Unreachable repositories: {', '.join(failed_repos)}")
+            click.echo("   These repositories will be skipped")
         
-        # Check for connected devices
+        if working_repos:
+            working_names = [repo['name'] for repo in working_repos]
+            click.echo(f"✓ Working repositories: {', '.join(working_names)}")
+        
+        # Continue with device updates regardless of repository status
+        if self.config.get('updates', {}).get('continue_on_repo_failure', True):
+            click.echo("\nContinuing with device package updates...")
+            self.check_device_updates()
+        
+        return repo_success or len(working_repos) > 0
+
+    def check_device_updates(self):
+        """Check for device updates regardless of repository status"""
         devices = self.get_connected_devices()
         
         if not devices:
             click.echo("No Android devices connected")
-            if repo_success:
-                click.echo("✓ Repository update completed successfully")
-            else:
-                click.echo("⚠️  Repository update had issues, but no devices to update")
-            return repo_success
+            return
         
         click.echo(f"Found {len(devices)} connected device(s)")
         
         # Update packages on each device
-        device_updates_success = True
         for device in devices:
             click.echo(f"\nChecking device: {device}")
             
@@ -195,24 +271,9 @@ class AndroidPackageManager:
             
             # Update packages on this device
             try:
-                device_result = self.update_device_packages(device, auto_update=False)
-                if not device_result:
-                    device_updates_success = False
+                self.update_device_packages(device, auto_update=False)
             except Exception as e:
                 click.echo(f"⚠️  Error updating device {device}: {e}")
-                device_updates_success = False
-        
-        # Summary
-        if repo_success and device_updates_success:
-            click.echo("\n✓ All updates completed successfully")
-        elif not repo_success and device_updates_success:
-            click.echo("\n⚠️  Repository updates had issues, but device updates completed")
-        elif repo_success and not device_updates_success:
-            click.echo("\n⚠️  Repository updates completed, but some device updates failed")
-        else:
-            click.echo("\n⚠️  Both repository and device updates had issues")
-        
-        return True  # Always return True to continue execution
 
     def get_device_info(self, device_id):
         """Get basic device information"""
@@ -231,9 +292,8 @@ class AndroidPackageManager:
         except:
             return device_id
 
-    
     def load_config(self, path):
-        """Load configuration from YAML file"""
+        """Load configuration from YAML file - NO DEFAULTS"""
         # Check different config locations
         config_locations = [
             path,
@@ -245,44 +305,20 @@ class AndroidPackageManager:
             if os.path.exists(config_path):
                 try:
                     with open(config_path, 'r') as f:
-                        return yaml.safe_load(f)
+                        config = yaml.safe_load(f)
+                        if config:
+                            return config
                 except Exception as e:
                     click.echo(f"Error loading config from {config_path}: {e}")
                     continue
         
-        # Create default config if none found
-        default_path = os.path.expanduser("~/.config/apm/config.yaml")
-        return self.create_default_config(default_path)
-    
-    def create_default_config(self, path):
-        """Create default configuration"""
-        default_config = {
-            'repositories': [
-                {
-                    'name': 'F-Droid',
-                    'url': 'https://f-droid.org/repo',
-                    'enabled': True
-                },
-                {
-                    'name': 'IzzyOnDroid',
-                    'url': 'https://apt.izzysoft.de/fdroid/repo',
-                    'enabled': True
-                }
-            ],
-            'cache_dir': '~/.cache/apm',
-            'download_dir': '~/.cache/apm/apks',
-            'auto_update': True,
-            'filters': {
-                'license_whitelist': ['GPL-3.0', 'Apache-2.0', 'MIT', 'BSD-3-Clause'],
-                'categories': ['System', 'Development', 'Internet', 'Security']
-            }
-        }
-        
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
-            yaml.dump(default_config, f, default_flow_style=False)
-        
-        return default_config
+        # NO DEFAULT CONFIG - fail if no config found
+        click.echo("❌ No configuration file found!")
+        click.echo("Expected locations:")
+        for loc in config_locations:
+            click.echo(f"  - {loc}")
+        click.echo("Please run the installation script first or create a configuration file.")
+        sys.exit(1)
     
     def load_mappings(self):
         """Load package name mappings"""
@@ -295,7 +331,7 @@ class AndroidPackageManager:
                 
                 if not raw_mappings:
                     click.echo("Warning: Package mappings file is empty")
-                    return self.create_default_mappings(mappings_path)
+                    return {}
                 
                 # Flatten nested mappings
                 flat_mappings = {}
@@ -316,51 +352,10 @@ class AndroidPackageManager:
                 click.echo(f"Error loading mappings: {e}")
                 return {}
         else:
-            return self.create_default_mappings(mappings_path)
-    
-    def create_default_mappings(self, path):
-        """Create default package mappings"""
-        default_mappings = {
-            "browsers": {
-                "firefox": "org.mozilla.fennec_fdroid",
-                "firefox-focus": "org.mozilla.focus",
-                "tor-browser": "org.torproject.torbrowser_alpha",
-                "privacy-browser": "com.stoutner.privacybrowser.standard"
-            },
-            "communication": {
-                "signal": "org.thoughtcrime.securesms",
-                "telegram": "org.telegram.messenger",
-                "element": "im.vector.app",
-                "briar": "org.briarproject.briar.android"
-            },
-            "media": {
-                "vlc": "org.videolan.vlc",
-                "newpipe": "org.schabi.newpipe",
-                "antennapod": "de.danoeh.antennapod"
-            },
-            "development": {
-                "termux": "com.termux",
-                "markor": "net.gsantner.markor",
-                "octodroid": "com.gh4a"
-            },
-            "security": {
-                "orbot": "org.torproject.android",
-                "keepass": "com.kunzisoft.keepass.libre",
-                "aegis": "com.beemdevelopment.aegis"
-            }
-        }
-        
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
-            yaml.dump(default_mappings, f, default_flow_style=False)
-        
-        # Return flattened mappings
-        flat_mappings = {}
-        for category, packages in default_mappings.items():
-            if isinstance(packages, dict):
-                flat_mappings.update(packages)
-        
-        return flat_mappings
+            click.echo("❌ Package mappings file not found!")
+            click.echo(f"Expected location: {mappings_path}")
+            click.echo("Please run the installation script first.")
+            return {}
     
     def resolve_package_name(self, package_name):
         """Resolve friendly name to actual package ID"""
@@ -480,19 +475,6 @@ class AndroidPackageManager:
         
         return devices
     
-    def update_repositories(self):
-        """Update repository indices"""
-        click.echo("Updating repository indices...")
-        
-        # Use fdroidcl to update
-        try:
-            subprocess.run(['fdroidcl', 'update'], check=True)
-            click.echo("Repository indices updated successfully")
-        except subprocess.CalledProcessError:
-            click.echo("Failed to update repository indices")
-        except FileNotFoundError:
-            click.echo("fdroidcl not found. Please install it first.")
-    
     def search_packages(self, query=None, category=None):
         """Search for packages in repositories"""
         try:
@@ -554,7 +536,7 @@ def cli(ctx):
 @cli.command()
 @click.pass_context
 def update(ctx):
-    """Update repository indices"""
+    """Update repository indices and device packages"""
     ctx.obj['pm'].update_repositories()
 
 @cli.command()
@@ -748,92 +730,75 @@ def debug_mappings(ctx, package_name):
                 break
             click.echo(f"  {key} -> {value}")
 
+# Repository management commands
 @cli.command()
-@click.option('--device', help='Target specific device ID')
-@click.option('--packages-only', is_flag=True, help='Only update packages, skip repository update')
-@click.option('--repos-only', is_flag=True, help='Only update repositories, skip package updates')
-@click.option('--auto-yes', is_flag=True, help='Automatically confirm package updates')
-@click.option('--ignore-repo-errors', is_flag=True, help='Continue even if repository updates fail')
 @click.pass_context
-def update(ctx, device, packages_only, repos_only, auto_yes, ignore_repo_errors):
-    """Update repository indices and device packages"""
+def repo_status(ctx):
+    """Check status of all configured repositories"""
     pm = ctx.obj['pm']
+    repositories = pm.config.get('repositories', [])
     
-    if packages_only and repos_only:
-        click.echo("Error: Cannot use --packages-only and --repos-only together")
+    if not repositories:
+        click.echo("No repositories configured")
         return
     
-    if repos_only:
-        # Only update repositories
-        try:
-            subprocess.run(['fdroidcl', 'update'], check=True)
-            click.echo("✓ Repository indices updated successfully")
-        except subprocess.CalledProcessError as e:
-            click.echo("⚠️  Repository update failed:")
-            if e.stderr:
-                click.echo(e.stderr)
-        except FileNotFoundError:
-            click.echo("✗ fdroidcl not found. Please install it first.")
-        return
+    click.echo("Repository Status Check:")
+    click.echo("=" * 60)
     
-    if packages_only:
-        # Only update packages
-        devices = pm.get_connected_devices()
-        if not devices:
-            click.echo("No Android devices connected")
-            return
+    for repo in repositories:
+        repo_name = repo['name']
+        repo_url = repo['url']
+        enabled = repo.get('enabled', True)
+        priority = repo.get('priority', 'N/A')
         
-        target_device = device if device else devices[0]
-        pm.update_device_packages(target_device, auto_update=auto_yes)
-        return
-    
-    # Full update (default behavior) - always continue to device updates
-    pm.update_repositories()
+        status_icon = "🔴 DISABLED" if not enabled else "🟡 CHECKING..."
+        click.echo(f"{repo_name:<25} {status_icon} (Priority: {priority})")
+        
+        if enabled:
+            if pm.test_repository_connectivity(repo_url):
+                click.echo(f"{repo_name:<25} 🟢 ONLINE")
+            else:
+                click.echo(f"{repo_name:<25} 🔴 OFFLINE")
+        
+        click.echo(f"{'  URL:':<25} {repo_url}")
+        if 'description' in repo:
+            click.echo(f"{'  Description:':<25} {repo['description']}")
+        click.echo()
 
 @cli.command()
-@click.option('--device', help='Target specific device ID')
 @click.pass_context
-def upgrade(ctx, device):
-    """Update packages on connected devices"""
+def repo_list(ctx):
+    """List all configured repositories"""
     pm = ctx.obj['pm']
+    repositories = pm.config.get('repositories', [])
     
-    devices = pm.get_connected_devices()
-    if not devices:
-        click.echo("No Android devices connected")
+    if not repositories:
+        click.echo("No repositories configured")
         return
     
-    target_devices = [device] if device else devices
+    click.echo("Configured Repositories:")
+    click.echo("=" * 80)
     
-    for dev in target_devices:
-        click.echo(f"\nUpdating packages on device: {dev}")
-        pm.update_device_packages(dev, auto_update=False)
-
-@cli.command()
-@click.option('--device', help='Target specific device ID')
-@click.pass_context
-def list_updates(ctx, device):
-    """List available package updates"""
-    pm = ctx.obj['pm']
+    enabled_count = 0
+    for repo in repositories:
+        name = repo['name']
+        url = repo['url']
+        enabled = repo.get('enabled', True)
+        priority = repo.get('priority', 'N/A')
+        
+        status = "✓ ENABLED " if enabled else "✗ DISABLED"
+        click.echo(f"{status} {name:<25} (Priority: {priority})")
+        click.echo(f"{'  URL:':<30} {url}")
+        
+        if 'description' in repo:
+            click.echo(f"{'  Description:':<30} {repo['description']}")
+        
+        if enabled:
+            enabled_count += 1
+        
+        click.echo()
     
-    devices = pm.get_connected_devices()
-    if not devices:
-        click.echo("No Android devices connected")
-        return
-    
-    target_device = device if device else devices[0]
-    updates = pm.get_available_updates(target_device)
-    
-    if not updates:
-        click.echo("✓ All packages are up to date")
-        return
-    
-    click.echo(f"Available updates for device {target_device}:")
-    click.echo(f"{'Package':<40} {'Current':<15} {'Latest':<15}")
-    click.echo("-" * 70)
-    
-    for update in updates:
-        click.echo(f"{update['package']:<40} {update['current_version']:<15} {update['latest_version']:<15}")
-
+    click.echo(f"Total: {len(repositories)} repositories ({enabled_count} enabled)")
 
 if __name__ == '__main__':
     cli()

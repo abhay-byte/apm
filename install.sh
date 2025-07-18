@@ -1,383 +1,314 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # APM (Android Package Manager) Installation Script
+# Uses ONLY repositories defined in config.yaml - NO hardcoded defaults
 
-set -e
+set -euo pipefail
 
-echo "Installing APM (Android Package Manager) with Multiple Repositories..."
-
-# Get script directory
+APM_HOME="$HOME/.config/apm"
+CACHE_DIR="$HOME/.cache/apm"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_CONFIG_DIR="$SCRIPT_DIR/.config"
 
-# Check prerequisites
-command -v python3 >/dev/null 2>&1 || { echo "Python 3 is required but not installed. Aborting." >&2; exit 1; }
-command -v adb >/dev/null 2>&1 || { echo "ADB is required but not installed. Aborting." >&2; exit 1; }
+echo "🔧 Installing APM (Android Package Manager)..."
+echo "📍 Script location: $SCRIPT_DIR"
 
-# Create directories
-mkdir -p ~/.config/apm
-mkdir -p ~/.cache/apm/apks
-mkdir -p ~/.cache/apm/logs
-mkdir -p ~/.cache/apm/repos
-mkdir -p ~/.local/share/apm
+# 1) Check prerequisites
+echo "🔍 Checking prerequisites..."
+command -v python3 >/dev/null 2>&1 || { echo "❌ Python 3 is required but not installed"; exit 1; }
+command -v adb     >/dev/null 2>&1 || { echo "❌ ADB is required but not installed"; exit 1; }
+command -v go      >/dev/null 2>&1 || { echo "❌ Go is required for fdroidcl"; exit 1; }
 
-# Install Python dependencies
-echo "Installing Python dependencies..."
+echo "✓ All prerequisites found"
+
+# 2) Create directory structure
+echo "📁 Creating directory structure..."
+mkdir -p "$APM_HOME" \
+         "$CACHE_DIR"/{apks,logs,repos} \
+         "$HOME/.local/bin" \
+         "$HOME/.local/share/apm" \
+         "$HOME/.local/share/bash-completion/completions" \
+         "$HOME/.local/share/applications"
+
+# 3) Install Python dependencies
+echo "📦 Installing Python dependencies..."
 pip3 install --user pyyaml requests click fdroidserver fdroid-dl --break-system-packages
 
-# Install Go if not present
-if ! command -v go >/dev/null 2>&1; then
-    echo "Go is required for fdroidcl. Please install Go and run: go install mvdan.cc/fdroidcl@latest"
-    exit 1
-fi
-
-# Install fdroidcl
-echo "Installing fdroidcl..."
+# 4) Install fdroidcl
+echo "📦 Installing fdroidcl..."
 go install mvdan.cc/fdroidcl@latest
 
-# Copy configuration files from repository
-echo "Installing configuration files..."
+# 5) Copy configuration files - REQUIRED
+echo "📄 Installing configuration files..."
 
-# Main configuration
+# Main configuration file
+CONFIG_SOURCE=""
 if [ -f "$REPO_CONFIG_DIR/config.yaml" ]; then
-    cp "$REPO_CONFIG_DIR/config.yaml" ~/.config/apm/
-    echo "✓ Installed main configuration from repository"
+    CONFIG_SOURCE="$REPO_CONFIG_DIR/config.yaml"
+    echo "✓ Found config.yaml in .config/ directory"
 elif [ -f "$SCRIPT_DIR/config.yaml" ]; then
-    cp "$SCRIPT_DIR/config.yaml" ~/.config/apm/
-    echo "✓ Installed main configuration from root"
+    CONFIG_SOURCE="$SCRIPT_DIR/config.yaml"
+    echo "✓ Found config.yaml in root directory"
 else
-    echo "Creating default configuration..."
-    cat > ~/.config/apm/config.yaml << 'EOF'
-# APM (Android Package Manager) Configuration with Multiple Repositories
-
-repositories:
-  - name: "F-Droid"
-    url: "https://f-droid.org/repo"
-    enabled: true
-    priority: 1
-    description: "Official F-Droid repository"
-    fingerprint: "43238D512C1E5EB2D6569F4A3AFBF5523418B82E0A3ED1552770ABB9A9C9CCAB"
-    
-  - name: "IzzyOnDroid"
-    url: "https://apt.izzysoft.de/fdroid/repo"
-    enabled: true
-    priority: 3
-    description: "Third-party F-Droid compatible repository"
-    fingerprint: "3BF0D6ABFEAE2F401707B6D966BE743BF0EEE49C2561B9BA39073711F628937A"
-    
-  - name: "Guardian Project"
-    url: "https://guardianproject.info/fdroid/repo"
-    enabled: true
-    priority: 4
-    description: "Privacy and security focused apps"
-    fingerprint: "B7C2EEFD8DAC7806AF67DFCD92EB18126BC08312A7F2D6F3862E46013C7A6135"
-    
-  - name: "microG"
-    url: "https://microg.org/fdroid/repo"
-    enabled: true
-    priority: 6
-    description: "microG Project repository"
-    fingerprint: "9BD06727E62796C0130EB6DAB39B73157451582CBD138E86C468ACC395D14165"
-    
-  - name: "NewPipe"
-    url: "https://archive.newpipe.net/fdroid/repo"
-    enabled: true
-    priority: 12
-    description: "NewPipe YouTube client"
-    fingerprint: "E2402C78F9B97C6C89E97DB914A2751FDA1D02FE2039CC0897A462BDB57E5B26"
-    
-  - name: "Molly"
-    url: "https://molly.im/fdroid/repo"
-    enabled: true
-    priority: 15
-    description: "Molly Signal fork"
-    fingerprint: "5198DAEF37FC23C14F5087E207A778E2DE99CA98D1FB651E982F8FDD1A0B6A7C"
-
-# Package filtering for FOSS apps only
-filters:
-  approved_licenses:
-    - "GPL-3.0"
-    - "GPL-2.0"
-    - "Apache-2.0"
-    - "MIT"
-    - "BSD-3-Clause"
-    - "ISC"
-    - "LGPL-3.0"
-    - "MPL-2.0"
-    
-  approved_categories:
-    - "System"
-    - "Development"
-    - "Internet"
-    - "Security"
-    - "Graphics"
-    - "Multimedia"
-    - "Office"
-    - "Games"
-    - "Science & Education"
-    
-  blocked_anti_features:
-    - "Ads"
-    - "Tracking"
-    - "NonFreeNet"
-    - "NonFreeAdd"
-    - "NonFreeDep"
-    - "UpstreamNonFree"
-
-# Installation settings
-installation:
-  auto_update: true
-  batch_size: 10
-  timeout: 300
-  retry_count: 3
-  verify_signatures: true
-  prefer_foss: true
-
-# Paths
-paths:
-  cache_dir: "~/.cache/apm"
-  download_dir: "~/.cache/apm/apks"
-  log_dir: "~/.cache/apm/logs"
-  config_dir: "~/.config/apm"
-  repo_cache_dir: "~/.cache/apm/repos"
-
-# Logging
-logging:
-  level: "INFO"
-  file: "apm.log"
-  max_size: "10MB"
-  backup_count: 5
-EOF
-    echo "✓ Created default configuration"
-fi
-
-# Package mappings - Check .config directory first
-if [ -f "$REPO_CONFIG_DIR/package_mappings.yaml" ]; then
-    cp "$REPO_CONFIG_DIR/package_mappings.yaml" ~/.config/apm/
-    echo "✓ Installed package mappings database from .config/"
-    
-    # Count packages for user feedback
-    MAPPING_COUNT=$(grep -c ":" "$REPO_CONFIG_DIR/package_mappings.yaml" 2>/dev/null || echo "unknown")
-    echo "  📦 Loaded $MAPPING_COUNT package mappings"
-    
-elif [ -f "$SCRIPT_DIR/package_mappings.yaml" ]; then
-    cp "$SCRIPT_DIR/package_mappings.yaml" ~/.config/apm/
-    echo "✓ Installed package mappings database from root"
-else
-    echo "Error: package_mappings.yaml not found in repository!" >&2
-    echo "Expected location: $REPO_CONFIG_DIR/package_mappings.yaml" >&2
+    echo "❌ config.yaml not found!"
+    echo "   Expected locations:"
+    echo "   - $REPO_CONFIG_DIR/config.yaml"
+    echo "   - $SCRIPT_DIR/config.yaml"
+    echo "   Please ensure your config.yaml exists before running installation."
     exit 1
 fi
 
-# Curation configuration
-if [ -f "$REPO_CONFIG_DIR/curation_config.yaml" ]; then
-    cp "$REPO_CONFIG_DIR/curation_config.yaml" ~/.config/apm/
-    echo "✓ Installed curation configuration from .config/"
-elif [ -f "$SCRIPT_DIR/curation_config.yaml" ]; then
-    cp "$SCRIPT_DIR/curation_config.yaml" ~/.config/apm/
-    echo "✓ Installed curation configuration from root"
-else
-    echo "Creating default curation configuration..."
-    cat > ~/.config/apm/curation_config.yaml << 'EOF'
-# APM Package Curation Configuration
-
-approved_licenses:
-  - "GPL-3.0"
-  - "GPL-2.0"
-  - "AGPL-3.0"
-  - "Apache-2.0"
-  - "MIT"
-  - "BSD-2-Clause"
-  - "BSD-3-Clause"
-  - "ISC"
-  - "LGPL-3.0"
-  - "LGPL-2.1"
-  - "MPL-2.0"
-  - "CC0-1.0"
-  - "Unlicense"
-  - "WTFPL"
-
-approved_categories:
-  - "System"
-  - "Development"
-  - "Internet"
-  - "Security"
-  - "Graphics"
-  - "Multimedia"
-  - "Office"
-  - "Games"
-  - "Science & Education"
-  - "Money"
-  - "Sports & Health"
-  - "Navigation"
-  - "Phone & SMS"
-  - "Reading"
-  - "Time"
-  - "Writing"
-  - "Connectivity"
-  - "Theming"
-
-blocked_anti_features:
-  - "Ads"
-  - "Tracking"
-  - "NonFreeNet"
-  - "NonFreeAdd"
-  - "NonFreeDep"
-  - "UpstreamNonFree"
-  - "NonFreeAssets"
-  - "KnownVuln"
-  - "NoSourceSince"
-  - "ApplicationDebuggable"
-
-# Quality requirements
-quality_filters:
-  min_downloads: 100
-  min_rating: 3.0
-  require_source_code: true
-  require_reproducible_builds: false
-  max_age_days: 1095  # 3 years
-  min_target_sdk: 26
-EOF
-    echo "✓ Created default curation configuration"
-fi
-
-# Validate package mappings file
-if [ -f ~/.config/apm/package_mappings.yaml ]; then
-    echo "Validating package mappings..."
-    
-    # Check if file is valid YAML
-    if command -v python3 >/dev/null 2>&1; then
-        python3 -c "
+# Fix path inconsistencies in config before copying
+echo "🔧 Fixing path inconsistencies in config..."
+python3 - << PYCODE
 import yaml
-try:
-    with open('$HOME/.config/apm/package_mappings.yaml', 'r') as f:
-        data = yaml.safe_load(f)
-    print('✓ Package mappings file is valid YAML')
-    
-    # Count categories and packages
-    if isinstance(data, dict):
-        categories = len(data)
-        total_packages = sum(len(v) if isinstance(v, dict) else 1 for v in data.values())
-        print(f'  📂 {categories} categories')
-        print(f'  📦 {total_packages} total packages')
-        
-        # Show some categories
-        print('  🏷️  Categories: ' + ', '.join(list(data.keys())[:5]) + ('...' if len(data) > 5 else ''))
-except Exception as e:
-    print(f'❌ Error validating package mappings: {e}')
-    exit(1)
-" || echo "Warning: Could not validate package mappings file"
-    fi
+
+# Load config
+with open("$CONFIG_SOURCE", 'r') as f:
+    config = yaml.safe_load(f)
+
+# Fix paths to use 'apm' instead of 'foss-pm'
+if 'paths' in config:
+    paths = config['paths']
+    for key, value in paths.items():
+        if isinstance(value, str) and 'foss-pm' in value:
+            paths[key] = value.replace('foss-pm', 'apm')
+            print(f"   Fixed {key}: {value} -> {paths[key]}")
+
+# Fix top-level path settings
+path_keys = ['cache_dir', 'download_dir', 'log_dir', 'config_dir']
+for key in path_keys:
+    if key in config and isinstance(config[key], str) and 'foss-pm' in config[key]:
+        old_value = config[key]
+        config[key] = config[key].replace('foss-pm', 'apm')
+        print(f"   Fixed {key}: {old_value} -> {config[key]}")
+
+# Fix logging file names
+if 'logging' in config and 'file' in config['logging']:
+    if 'foss-pm' in config['logging']['file']:
+        old_file = config['logging']['file']
+        config['logging']['file'] = config['logging']['file'].replace('foss-pm', 'apm')
+        print(f"   Fixed logging file: {old_file} -> {config['logging']['file']}")
+
+# Save corrected config
+with open("$APM_HOME/config.yaml", 'w') as f:
+    yaml.dump(config, f, default_flow_style=False, indent=2)
+
+print("✓ Configuration installed with corrected paths")
+PYCODE
+
+# 6) Copy package mappings (required)
+echo "📦 Installing package mappings..."
+if [ -f "$REPO_CONFIG_DIR/package_mappings.yaml" ]; then
+    cp "$REPO_CONFIG_DIR/package_mappings.yaml" "$APM_HOME/package_mappings.yaml"
+    echo "✓ Installed package mappings from .config/"
+elif [ -f "$SCRIPT_DIR/package_mappings.yaml" ]; then
+    cp "$SCRIPT_DIR/package_mappings.yaml" "$APM_HOME/package_mappings.yaml"
+    echo "✓ Installed package mappings from root"
 else
-    echo "✓ Package mappings file copied successfully"
+    echo "❌ package_mappings.yaml not found!"
+    echo "   This file is required for APM to function."
+    exit 1
 fi
 
-# Configure fdroidcl with multiple repositories
-echo "Configuring fdroidcl with multiple repositories..."
+# 7) Copy curation config if present
+if [ -f "$REPO_CONFIG_DIR/curation_config.yaml" ]; then
+    cp "$REPO_CONFIG_DIR/curation_config.yaml" "$APM_HOME/curation_config.yaml"
+    echo "✓ Installed curation_config.yaml from .config/"
+elif [ -f "$SCRIPT_DIR/curation_config.yaml" ]; then
+    cp "$SCRIPT_DIR/curation_config.yaml" "$APM_HOME/curation_config.yaml"
+    echo "✓ Installed curation_config.yaml from root"
+fi
+
+# 8) Validate configuration
+echo "✅ Validating configuration..."
+python3 - << PYCODE
+import yaml
+import os
+
+config_path = "$APM_HOME/config.yaml"
+mappings_path = "$APM_HOME/package_mappings.yaml"
+
+# Validate config.yaml
+try:
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Check for repositories
+    repos = config.get('repositories', [])
+    enabled_repos = [r for r in repos if r.get('enabled', True)]
+    
+    print(f"✓ Configuration is valid YAML")
+    print(f"   📊 Total repositories: {len(repos)}")
+    print(f"   ✅ Enabled repositories: {len(enabled_repos)}")
+    
+    if len(enabled_repos) == 0:
+        print("⚠️  Warning: No enabled repositories found")
+    
+    # Show enabled repos
+    for repo in enabled_repos[:5]:  # Show first 5
+        print(f"   • {repo.get('name', 'Unknown')}")
+    if len(enabled_repos) > 5:
+        print(f"   ... and {len(enabled_repos) - 5} more")
+        
+except Exception as e:
+    print(f"❌ Configuration validation failed: {e}")
+    exit(1)
+
+# Validate package mappings
+try:
+    with open(mappings_path, 'r') as f:
+        mappings = yaml.safe_load(f)
+    
+    if isinstance(mappings, dict):
+        categories = len(mappings)
+        total_packages = sum(len(v) if isinstance(v, dict) else 1 for v in mappings.values())
+        print(f"✓ Package mappings are valid YAML")
+        print(f"   📂 Categories: {categories}")
+        print(f"   📦 Total packages: {total_packages}")
+    else:
+        print("⚠️  Package mappings format may be incorrect")
+        
+except Exception as e:
+    print(f"❌ Package mappings validation failed: {e}")
+    exit(1)
+PYCODE
+
+# 9) Configure fdroidcl and add repositories from config
+echo "🔗 Configuring fdroidcl..."
 fdroidcl config > /dev/null 2>&1 || true
 
-# Enhanced repository addition with correct fdroidcl syntax
-echo "Adding F-Droid repositories..."
+echo "📡 Adding repositories from config.yaml..."
+python3 - << PYCODE
+import yaml
+import subprocess
+import sys
+import requests
+from urllib.parse import urljoin
 
-# Initialize fdroidcl if not already done
-echo "Initializing fdroidcl configuration..."
-fdroidcl config > /dev/null 2>&1 || true
+with open("$APM_HOME/config.yaml", 'r') as f:
+    config = yaml.safe_load(f)
 
-# Add repositories using correct syntax
-repositories=(
-    "https://f-droid.org/repo"
-    "https://apt.izzysoft.de/fdroid/repo"
-    "https://guardianproject.info/fdroid/repo"
-    "https://microg.org/fdroid/repo"
-    "https://archive.newpipe.net/fdroid/repo"
-    "https://molly.im/fdroid/repo"
-)
+repos = config.get('repositories', [])
+enabled_repos = [r for r in repos if r.get('enabled', True)]
 
-repo_names=(
-    "F-Droid"
-    "IzzyOnDroid"
-    "Guardian"
-    "microG"
-    "NewPipe"
-    "Molly"
-)
+if not enabled_repos:
+    print("❌ No enabled repositories found in config.yaml")
+    sys.exit(1)
 
-for i in "${!repositories[@]}"; do
-    repo_url="${repositories[$i]}"
-    repo_name="${repo_names[$i]}"
+success_count = 0
+total_repos = len(enabled_repos)
+
+for repo in enabled_repos:
+    name = repo.get('name', 'Unknown')
+    url = repo.get('url', '')
+    fp = repo.get('fingerprint', '')
+    priority = repo.get('priority', 'N/A')
     
-    echo "Adding $repo_name repository..."
+    if not url:
+        print(f"⚠️  Skipping '{name}' - no URL specified")
+        continue
     
-    # Try different fdroidcl command formats
-    if fdroidcl add-repo "$repo_url" 2>/dev/null; then
-        echo "✓ Successfully added $repo_name repository"
-    elif fdroidcl repo add "$repo_url" 2>/dev/null; then
-        echo "✓ Successfully added $repo_name repository"
-    else
-        echo "⚠️  Failed to add $repo_name repository automatically"
-        echo "   You can add it manually with: fdroidcl add-repo $repo_url"
-    fi
-done
+    # Quick connectivity test
+    try:
+        # For F-Droid and most : just index-v1.jar
+        if url.endswith("/repo") or url.endswith("/repo/"):
+            index_url = urljoin(url+"/repo", 'index-v1.jar')
+        else:
+            # For /fdroid/official etc
+            index_url = urljoin(url + "/", 'index-v1.jar')
+        print(index_url)
+        response = requests.head(index_url, timeout=10, allow_redirects=True)
+        if response.status_code >= 400:
+            raise ValueError(f"HTTP {response.status_code}")
+    except Exception as e:
+        print(f"⚠️  Skipping '{name}' - unreachable ({e})")
+        continue
+    
+    print(f"→ Adding '{name}' (priority: {priority})")
+    print(f"   URL: {url}")
+    
+    try:
+        cmd = ['fdroidcl', 'repo', 'add', url]
+        if fp:
+            cmd.append(fp)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False
+        )
+        stderr_lower = result.stderr.lower() if result.stderr else ""
+        if result.returncode == 0:
+            print(f"   ✓ Successfully added")
+            success_count += 1
+        elif (
+            "already configured" in stderr_lower
+            or "already exists" in stderr_lower
+            or "repo: a repo with the same name" in stderr_lower
+            or "repository already exists" in stderr_lower
+        ):
+            print(f"   ✓ Already configured")
+            success_count += 1
+        else:
+            print(f"   ⚠️  Failed to add (code {result.returncode})")
+            if result.stderr.strip():
+                print(f"      Error: {result.stderr.strip()}")
+            print(f"      You can add manually: fdroidcl repo add {url}" + (f" {fp}" if fp else ""))
+    except subprocess.TimeoutExpired:
+        print(f"   ⚠️  Timed out adding repository")
+    except Exception as e:
+        print(f"   ⚠️  Error: {e}")
 
-# Update repositories
-echo "Updating repository indices..."
-if fdroidcl update 2>/dev/null; then
+print(f"\n📊 Repository addition summary: {success_count}/{total_repos} successful")
+PYCODE
+
+# 10) Update repositories
+echo "🔄 Updating repository indices..."
+if fdroidcl update; thenfdroidcl
     echo "✓ Repository update successful"
 else
-    echo "⚠️  Repository update failed - some repos may not be available"
-    echo "   Try running: fdroidcl update"
+    echo "⚠️  Repository update had issues - some repos may not be available"
 fi
 
-# Make main script executable
+# 11) Install apm script
+echo "🔧 Installing APM script..."
 chmod +x "$SCRIPT_DIR/apm.py"
 
-# Create symlink for global access
-if [ -w "/usr/local/bin" ] || [ "$EUID" -eq 0 ]; then
+if [ -w "/usr/local/bin" ] || [ "$(id -u)" -eq 0 ]; then
     ln -sf "$SCRIPT_DIR/apm.py" /usr/local/bin/apm
-    echo "✓ Created global symlink at /usr/local/bin/apm"
+    echo "✓ Installed global 'apm' command to /usr/local/bin"
 else
-    echo "Creating user-local symlink..."
-    mkdir -p ~/.local/bin
-    ln -sf "$SCRIPT_DIR/apm.py" ~/.local/bin/apm
-    echo "✓ Created user symlink at ~/.local/bin/apm"
+    ln -sf "$SCRIPT_DIR/apm.py" "$HOME/.local/bin/apm"
+    echo "✓ Installed 'apm' to ~/.local/bin"
     
     # Check if ~/.local/bin is in PATH
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-        echo "⚠️  Add ~/.local/bin to your PATH by adding this to ~/.bashrc:"
-        echo "   export PATH=\"\$HOME/.local/bin:\$PATH\""
+        echo "⚠️  Add ~/.local/bin to your PATH:"
+        echo "   echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+        echo "   source ~/.bashrc"
     fi
 fi
 
-# Create bash completion
-mkdir -p ~/.local/share/bash-completion/completions
-cat > ~/.local/share/bash-completion/completions/apm << 'EOF'
+# 12) Install bash completion
+echo "🔧 Installing bash completion..."
+cat > "$HOME/.local/share/bash-completion/completions/apm" << 'EOF'
 _apm_complete() {
     local cur prev opts
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     
-    opts="install search update devices mappings add-mapping remove-mapping resolve list-categories batch-install help"
+    opts="install search update devices mappings add-mapping remove-mapping resolve list-categories batch-install repo-status repo-list help"
     
     case $prev in
         install|resolve|remove-mapping)
-            # Complete with package names from mappings
             local packages=$(apm mappings 2>/dev/null | awk '{print $1}' | grep -v "Package" | head -50)
             COMPREPLY=($(compgen -W "$packages" -- "$cur"))
             return 0
             ;;
         --device)
-            # Complete with device IDs
             local devices=$(apm devices 2>/dev/null | grep -v "Connected devices:" | awk '{print $1}')
             COMPREPLY=($(compgen -W "$devices" -- "$cur"))
-            return 0
-            ;;
-        --source)
-            COMPREPLY=($(compgen -W "fdroid auto" -- "$cur"))
-            return 0
-            ;;
-        list-category)
-            # Complete with category names
-            local categories=$(apm list-categories 2>/dev/null | grep -v "Available Categories:" | awk '{print $1}')
-            COMPREPLY=($(compgen -W "$categories" -- "$cur"))
             return 0
             ;;
     esac
@@ -388,9 +319,9 @@ _apm_complete() {
 complete -F _apm_complete apm
 EOF
 
-# Create desktop entry
-mkdir -p ~/.local/share/applications
-cat > ~/.local/share/applications/apm.desktop << 'EOF'
+# 13) Create desktop entry
+echo "🔧 Creating desktop entry..."
+cat > "$HOME/.local/share/applications/apm.desktop" << 'EOF'
 [Desktop Entry]
 Name=APM (Android Package Manager)
 Comment=Command-line package manager for Android FOSS apps
@@ -399,14 +330,13 @@ Icon=system-software-install
 Terminal=true
 Type=Application
 Categories=System;PackageManager;
-Keywords=android;foss;fdroid;package;manager;apm;
 EOF
 
-# Set permissions
-chmod +x ~/.local/share/applications/apm.desktop
+chmod +x "$HOME/.local/share/applications/apm.desktop"
 
-# Create update script for easy maintenance
-cat > ~/.local/bin/update-apm << 'EOF'
+# 14) Create update script
+echo "🔧 Creating update script..."
+cat > "$HOME/.local/bin/update-apm" << 'EOF'
 #!/bin/bash
 # APM (Android Package Manager) Update Script
 
@@ -435,47 +365,29 @@ else
 fi
 EOF
 
-chmod +x ~/.local/bin/update-apm
+chmod +x "$HOME/.local/bin/update-apm"
+
+
 
 echo ""
-echo "🎉 Installation complete!"
+echo "🎉 APM Installation Complete!"
 echo ""
-echo "APM (Android Package Manager) features:"
-echo "✓ Multiple F-Droid repositories configured"
-echo "✓ Comprehensive FOSS package mappings database"
-echo "✓ Bash completion support"
-echo "✓ Desktop integration"
-echo "✓ Auto-update script included"
+echo "📊 Configuration Summary:"
+echo "   📂 Config directory: $APM_HOME"
+echo "   📂 Cache directory: $CACHE_DIR"
+echo "   📄 Main config: $APM_HOME/config.yaml"
+echo "   📦 Package mappings: $APM_HOME/package_mappings.yaml"
 echo ""
-echo "Configuration files:"
-echo "📂 Repository: $SCRIPT_DIR"
-echo "📂 User config: ~/.config/apm/"
-echo "📂 Package mappings: ~/.config/apm/package_mappings.yaml"
+echo "🚀 Usage Examples:"
+echo "   apm repo-status          # Check repository connectivity"
+echo "   apm repo-list            # List configured repositories"
+echo "   apm update               # Update repos and device packages"
+echo "   apm install firefox      # Install applications"
+echo "   apm search browser       # Search for packages"
+echo "   apm mappings             # List package mappings"
 echo ""
-echo "Usage examples:"
-echo "  apm install firefox signal keepass"
-echo "  apm search browser"
-echo "  apm mappings | grep -i music"
-echo "  apm update"
+echo "📚 Help:"
+echo "   apm --help               # Show all commands"
+echo "   update-apm               # Update APM itself"
 echo ""
-echo "To update APM in the future:"
-echo "  update-apm"
-echo ""
-echo "Run 'apm help' for more information."
-
-# Test installation
-echo ""
-echo "Testing installation..."
-if command -v apm >/dev/null 2>&1; then
-    echo "✓ apm command is available"
-    
-    # Test basic functionality
-    if apm mappings >/dev/null 2>&1; then
-        echo "✓ Package mappings loaded successfully"
-    else
-        echo "⚠️  Warning: Package mappings test failed"
-    fi
-else
-    echo "❌ Error: apm command not found in PATH"
-    echo "Try running: source ~/.bashrc"
-fi
+echo "✅ Installation successful! Happy package managing! 🤖📱"
