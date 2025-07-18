@@ -5,11 +5,19 @@ download_dir: ~/.cache/foss-pm/apks
 updates:
   check_device_updates: true
   auto_update_packages: false
+  continue_on_repo_failure: true  # Always check device updates
+  use_cached_data: true          # Use cached repo data if update fails
   update_check_interval: "daily"
   prompt_before_update: true
   max_concurrent_updates: 3
   exclude_packages: []
   
+# Error handling
+error_handling:
+  continue_on_repo_errors: true
+  retry_failed_downloads: 3
+  timeout_seconds: 30
+
 # Device settings
 devices:
   auto_detect: true

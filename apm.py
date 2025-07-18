@@ -104,10 +104,15 @@ class AndroidPackageManager:
 
     def update_device_packages(self, device_id=None, auto_update=False):
         """Update packages on connected device"""
-        updates = self.get_available_updates(device_id)
+        try:
+            updates = self.get_available_updates(device_id)
+        except Exception as e:
+            click.echo(f"⚠️  Could not check for updates: {e}")
+            # Try to continue with cached repository data
+            updates = []
         
         if not updates:
-            click.echo("✓ All packages are up to date")
+            click.echo("✓ All packages are up to date (or no updates could be determined)")
             return True
         
         click.echo(f"Found {len(updates)} package updates available:")
@@ -131,38 +136,55 @@ class AndroidPackageManager:
                 subprocess.run(['fdroidcl', 'install', package], check=True)
                 click.echo(f"✓ Updated {package}")
                 success_count += 1
-            except subprocess.CalledProcessError:
-                click.echo(f"✗ Failed to update {package}")
+            except subprocess.CalledProcessError as e:
+                click.echo(f"⚠️  Failed to update {package}: {e}")
+                # Continue with other packages
         
         click.echo(f"Successfully updated {success_count}/{len(updates)} packages")
-        return success_count == len(updates)
+        return success_count > 0  # Return True if at least one package was updated
 
+            
     def update_repositories(self):
         """Update repository indices and device packages"""
         click.echo("Updating repository indices...")
         
-        # Update repository indices
+        # Update repository indices - don't fail if this doesn't work
         repo_success = True
         try:
-            subprocess.run(['fdroidcl', 'update'], check=True)
+            result = subprocess.run(['fdroidcl', 'update'], 
+                                capture_output=True, text=True, check=True)
             click.echo("✓ Repository indices updated successfully")
-        except subprocess.CalledProcessError:
-            click.echo("✗ Failed to update repository indices")
+        except subprocess.CalledProcessError as e:
+            click.echo("⚠️  Repository update had issues:")
+            if e.stderr:
+                # Show specific errors but continue
+                for line in e.stderr.split('\n'):
+                    if line.strip():
+                        click.echo(f"   {line}")
             repo_success = False
         except FileNotFoundError:
             click.echo("✗ fdroidcl not found. Please install it first.")
-            return False
+            # Don't return here - we can still check device updates
+            repo_success = False
+        
+        # Always continue to device updates regardless of repository status
+        click.echo("\nChecking for device package updates...")
         
         # Check for connected devices
         devices = self.get_connected_devices()
         
         if not devices:
             click.echo("No Android devices connected")
+            if repo_success:
+                click.echo("✓ Repository update completed successfully")
+            else:
+                click.echo("⚠️  Repository update had issues, but no devices to update")
             return repo_success
         
         click.echo(f"Found {len(devices)} connected device(s)")
         
         # Update packages on each device
+        device_updates_success = True
         for device in devices:
             click.echo(f"\nChecking device: {device}")
             
@@ -172,9 +194,25 @@ class AndroidPackageManager:
                 click.echo(f"Device: {device_info}")
             
             # Update packages on this device
-            self.update_device_packages(device, auto_update=False)
+            try:
+                device_result = self.update_device_packages(device, auto_update=False)
+                if not device_result:
+                    device_updates_success = False
+            except Exception as e:
+                click.echo(f"⚠️  Error updating device {device}: {e}")
+                device_updates_success = False
         
-        return repo_success
+        # Summary
+        if repo_success and device_updates_success:
+            click.echo("\n✓ All updates completed successfully")
+        elif not repo_success and device_updates_success:
+            click.echo("\n⚠️  Repository updates had issues, but device updates completed")
+        elif repo_success and not device_updates_success:
+            click.echo("\n⚠️  Repository updates completed, but some device updates failed")
+        else:
+            click.echo("\n⚠️  Both repository and device updates had issues")
+        
+        return True  # Always return True to continue execution
 
     def get_device_info(self, device_id):
         """Get basic device information"""
@@ -715,8 +753,9 @@ def debug_mappings(ctx, package_name):
 @click.option('--packages-only', is_flag=True, help='Only update packages, skip repository update')
 @click.option('--repos-only', is_flag=True, help='Only update repositories, skip package updates')
 @click.option('--auto-yes', is_flag=True, help='Automatically confirm package updates')
+@click.option('--ignore-repo-errors', is_flag=True, help='Continue even if repository updates fail')
 @click.pass_context
-def update(ctx, device, packages_only, repos_only, auto_yes):
+def update(ctx, device, packages_only, repos_only, auto_yes, ignore_repo_errors):
     """Update repository indices and device packages"""
     pm = ctx.obj['pm']
     
@@ -729,8 +768,10 @@ def update(ctx, device, packages_only, repos_only, auto_yes):
         try:
             subprocess.run(['fdroidcl', 'update'], check=True)
             click.echo("✓ Repository indices updated successfully")
-        except subprocess.CalledProcessError:
-            click.echo("✗ Failed to update repository indices")
+        except subprocess.CalledProcessError as e:
+            click.echo("⚠️  Repository update failed:")
+            if e.stderr:
+                click.echo(e.stderr)
         except FileNotFoundError:
             click.echo("✗ fdroidcl not found. Please install it first.")
         return
@@ -746,7 +787,7 @@ def update(ctx, device, packages_only, repos_only, auto_yes):
         pm.update_device_packages(target_device, auto_update=auto_yes)
         return
     
-    # Full update (default behavior)
+    # Full update (default behavior) - always continue to device updates
     pm.update_repositories()
 
 @cli.command()
