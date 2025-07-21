@@ -23,3 +23,6 @@ libreoffice-reader
 libreoffice-viewer
 navi
 proton-vpn
+kernelsu
+wattz
+kde-connect

@@ -196,7 +196,7 @@ system:
   simple-keyboard: "rkr.simplekeyboard.inputmethod"
   outertune: "om.dd3boh.outertune"
   fdroid: "org.fdroid.fdroid"
-  kernalsu: "me.weishu.kernelsu"
+  kernelsu: "me.weishu.kernelsu"
   aurora-store: "com.aurora.store"
   aurora-droid: "com.aurora.adroid"
   neo-store: "com.machiav3lli.fdroid"
@@ -239,6 +239,8 @@ system:
   battery-bot: "com.darshancomputing.BatteryIndicator"
   data-monitor: "com.drnoob.datamonitor"
   network-survey: "com.craxiom.networksurvey"
+  wattz: "dubrowgn.wattz"
+  kde-connect: "org.kde.kdeconnect_tp"
 
 graphics:
   simple-draw: "com.simplemobiletools.draw.pro"
